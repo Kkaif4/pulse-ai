@@ -6,20 +6,39 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "worker": "npx tsx scripts/cron-worker.ts",
+    "ws": "npx tsx scripts/websocket-server.ts",
+    "fastapi": "PYTHONPATH=. python3.13 scripts/fastapi_app.py",
+    "electron": "electron ."
   },
   "dependencies": {
+    "@prisma/adapter-pg": "^7.9.1",
+    "@prisma/client": "^7.9.1",
+    "axios": "^1.19.0",
+    "bcryptjs": "^3.0.3",
+    "ioredis": "^6.0.0",
+    "jsonwebtoken": "^9.0.3",
     "next": "16.3.1",
+    "node-cron": "^4.6.0",
+    "pg": "^8.23.0",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "ws": "^8.21.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/bcryptjs": "^3.0.0",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^20",
+    "@types/node-cron": "^3.0.11",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/ws": "^8.18.1",
     "eslint": "^9",
     "eslint-config-next": "16.3.1",
+    "prisma": "^7.9.1",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

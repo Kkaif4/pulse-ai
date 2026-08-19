@@ -1,0 +1,12 @@
+{
+  "appId": "com.pulseai.app",
+  "appName": "pulseAI",
+  "webDir": "out",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https",
+    "allowNavigation": [
+      "localhost:3000"
+    ]
+  }
+}

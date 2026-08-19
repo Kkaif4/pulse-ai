@@ -1,0 +1,7 @@
+{
+  "python.defaultInterpreterPath": "/usr/bin/python3.13",
+  "python.analysis.extraPaths": [
+    "./",
+    "./scripts"
+  ]
+}
