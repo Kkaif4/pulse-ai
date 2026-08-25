@@ -21,13 +21,13 @@ export function InteractiveTradingChart({ trades }: { trades: Trade[] }) {
     );
   }
 
-  const width = 600;
-  const height = 300;
-  const padding = { top: 20, right: 45, bottom: 35, left: 55 };
-
   const startIndex = Math.max(0, Math.floor(zoomRange.start * (trades.length - 1)));
   const endIndex = Math.min(trades.length - 1, Math.ceil(zoomRange.end * (trades.length - 1)));
   const visibleTrades = trades.slice(startIndex, endIndex + 1);
+
+  const chartWidth = Math.max(800, visibleTrades.length * 14);
+  const height = 300;
+  const padding = { top: 20, right: 45, bottom: 35, left: 55 };
 
   const spotPrices = visibleTrades.map((t) => Number(t.spotPrice));
   const pcrs = visibleTrades.map((t) => Number(t.pcr));
@@ -48,7 +48,7 @@ export function InteractiveTradingChart({ trades }: { trades: Trade[] }) {
     if (endIndex <= startIndex) return padding.left;
     const relativeIndex = index - startIndex;
     const totalVisible = endIndex - startIndex;
-    return padding.left + (relativeIndex / totalVisible) * (width - padding.left - padding.right);
+    return padding.left + (relativeIndex / totalVisible) * (chartWidth - padding.left - padding.right);
   };
 
   const getYSpot = (val: number) => {
@@ -93,10 +93,10 @@ export function InteractiveTradingChart({ trades }: { trades: Trade[] }) {
 
         const rect = svgEl.getBoundingClientRect();
         const mouseX = e.clientX - rect.left;
-        const viewBoxX = (mouseX / rect.width) * width;
-        const chartWidth = width - padding.left - padding.right;
+        const viewBoxX = (mouseX / rect.width) * chartWidth;
+        const innerChartWidth = chartWidth - padding.left - padding.right;
         const relativeX = viewBoxX - padding.left;
-        const pct = Math.max(0, Math.min(1, relativeX / chartWidth));
+        const pct = Math.max(0, Math.min(1, relativeX / innerChartWidth));
 
         let newStart = prev.start + change * pct;
         let newEnd = prev.end - change * (1 - pct);
@@ -119,7 +119,7 @@ export function InteractiveTradingChart({ trades }: { trades: Trade[] }) {
     return () => {
       svgEl.removeEventListener("wheel", handleWheel);
     };
-  }, [trades.length]);
+  }, [trades.length, chartWidth]);
 
   const handleMouseDown = (e: React.MouseEvent<SVGSVGElement>) => {
     if (zoomRange.start > 0 || zoomRange.end < 1) {
@@ -135,11 +135,12 @@ export function InteractiveTradingChart({ trades }: { trades: Trade[] }) {
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
 
-    const viewBoxX = (mouseX / rect.width) * width;
+    const viewBoxX = (mouseX / rect.width) * chartWidth;
 
     if (isDragging && dragStartRef.current !== null && zoomRangeStartOnDragRef.current !== null) {
       const deltaX = e.clientX - dragStartRef.current;
-      const chartWidthInDOM = rect.width * ((width - padding.left - padding.right) / width);
+      const mainChartWidth = chartWidth - padding.left - padding.right;
+      const chartWidthInDOM = rect.width * (mainChartWidth / chartWidth);
       const pctChange = deltaX / chartWidthInDOM;
 
       const span = zoomRangeStartOnDragRef.current.end - zoomRangeStartOnDragRef.current.start;
@@ -158,9 +159,9 @@ export function InteractiveTradingChart({ trades }: { trades: Trade[] }) {
       setZoomRange({ start: newStart, end: newEnd });
     }
 
-    const chartWidth = width - padding.left - padding.right;
+    const innerChartWidth = chartWidth - padding.left - padding.right;
     const relativeX = viewBoxX - padding.left;
-    const pct = Math.max(0, Math.min(1, relativeX / chartWidth));
+    const pct = Math.max(0, Math.min(1, relativeX / innerChartWidth));
     const visibleLength = endIndex - startIndex;
     const index = startIndex + Math.round(pct * visibleLength);
 
@@ -191,12 +192,17 @@ export function InteractiveTradingChart({ trades }: { trades: Trade[] }) {
     setZoomRange({ start: 0, end: 1 });
   };
 
-  const hoveredTrade = hoveredIndex !== null ? trades[hoveredIndex] : null;
   const isZoomed = zoomRange.start > 0 || zoomRange.end < 1;
+  const hoveredTrade = hoveredIndex !== null ? trades[hoveredIndex] : null;
 
   return (
-    <div className="relative w-full h-full flex flex-col">
-      <div className="flex gap-4 items-center justify-end px-4 mb-2 text-xs">
+    <div className="flex flex-col h-full w-full bg-zinc-950/80 rounded-xl border border-zinc-800/80 p-4 shadow-2xl backdrop-blur-xl">
+      {/* Header controls */}
+      <div className="flex items-center justify-between gap-2 mb-3 text-xs">
+        <div className="flex items-center gap-2">
+          <span className="font-semibold text-zinc-200 tracking-wide text-sm">pulseAI Live Chart</span>
+          <span className="text-zinc-500 text-[11px] font-mono">({trades.length} pts, Full Day)</span>
+        </div>
         {isZoomed && (
           <button
             onClick={resetZoom}
@@ -227,11 +233,13 @@ export function InteractiveTradingChart({ trades }: { trades: Trade[] }) {
         </button>
       </div>
 
-      <div className="relative flex-1">
+      <div className="relative flex-1 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-zinc-900">
         <svg
           ref={svgRef}
-          viewBox={`0 0 ${width} ${height}`}
-          className={`w-full h-full select-none ${isZoomed ? (isDragging ? "cursor-grabbing" : "cursor-grab") : ""}`}
+          width={chartWidth}
+          height={height}
+          viewBox={`0 0 ${chartWidth} ${height}`}
+          className={`h-full select-none ${isZoomed ? (isDragging ? "cursor-grabbing" : "cursor-grab") : ""}`}
           onMouseMove={handleMouseMove}
           onMouseLeave={handleMouseLeave}
           onMouseDown={handleMouseDown}
@@ -244,14 +252,14 @@ export function InteractiveTradingChart({ trades }: { trades: Trade[] }) {
             const pcrVal = yMaxPcr - p * (yMaxPcr - yMinPcr);
             return (
               <g key={i}>
-                <line x1={padding.left} y1={y} x2={width - padding.right} y2={y} stroke="#3f3f46" strokeDasharray="3,3" className="opacity-20" />
+                <line x1={padding.left} y1={y} x2={chartWidth - padding.right} y2={y} stroke="#3f3f46" strokeDasharray="3,3" className="opacity-20" />
                 {showSpot && (
                   <text x={padding.left - 8} y={y + 4} fill="#ffffff" fontSize={9} textAnchor="end" className="font-mono opacity-90">
                     {Math.round(spotVal)}
                   </text>
                 )}
                 {showPcr && (
-                  <text x={width - padding.right + 8} y={y + 4} fill="#ffffff" fontSize={9} textAnchor="start" className="font-mono opacity-90">
+                  <text x={chartWidth - padding.right + 8} y={y + 4} fill="#ffffff" fontSize={9} textAnchor="start" className="font-mono opacity-90">
                     {pcrVal.toFixed(2)}
                   </text>
                 )}

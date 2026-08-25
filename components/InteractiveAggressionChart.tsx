@@ -19,13 +19,13 @@ export function InteractiveAggressionChart({ trades }: { trades: Trade[] }) {
     );
   }
 
-  const width = 600;
-  const height = 300;
-  const padding = { top: 20, right: 45, bottom: 35, left: 55 };
-
   const startIndex = Math.max(0, Math.floor(zoomRange.start * (trades.length - 1)));
   const endIndex = Math.min(trades.length - 1, Math.ceil(zoomRange.end * (trades.length - 1)));
   const visibleTrades = trades.slice(startIndex, endIndex + 1);
+
+  const chartWidth = Math.max(800, visibleTrades.length * 14);
+  const height = 300;
+  const padding = { top: 20, right: 45, bottom: 35, left: 55 };
 
   const ceAggrs = visibleTrades.map((t) => Number(t.avgCeAggr));
   const peAggrs = visibleTrades.map((t) => Number(t.avgPeAggr));
@@ -40,7 +40,7 @@ export function InteractiveAggressionChart({ trades }: { trades: Trade[] }) {
     if (endIndex <= startIndex) return padding.left;
     const relativeIndex = index - startIndex;
     const totalVisible = endIndex - startIndex;
-    return padding.left + (relativeIndex / totalVisible) * (width - padding.left - padding.right);
+    return padding.left + (relativeIndex / totalVisible) * (chartWidth - padding.left - padding.right);
   };
 
   const getY = (val: number) => {
@@ -81,59 +81,44 @@ export function InteractiveAggressionChart({ trades }: { trades: Trade[] }) {
 
         const rect = svgEl.getBoundingClientRect();
         const mouseX = e.clientX - rect.left;
-        const viewBoxX = (mouseX / rect.width) * width;
-        const chartWidth = width - padding.left - padding.right;
+        const viewBoxX = (mouseX / rect.width) * chartWidth;
+        const mainChartWidth = chartWidth - padding.left - padding.right;
         const relativeX = viewBoxX - padding.left;
-        const pct = Math.max(0, Math.min(1, relativeX / chartWidth));
+        const pct = Math.max(0, Math.min(1, relativeX / mainChartWidth));
 
         let newStart = prev.start + change * pct;
         let newEnd = prev.end - change * (1 - pct);
 
-        const minSpan = Math.max(0.02, 5 / trades.length);
-        if (newEnd - newStart < minSpan) {
+        if (newEnd - newStart < 0.05) {
           const center = (prev.start + prev.end) / 2;
-          newStart = center - minSpan / 2;
-          newEnd = center + minSpan / 2;
+          newStart = Math.max(0, center - 0.025);
+          newEnd = Math.min(1, center + 0.025);
         }
 
-        newStart = Math.max(0, newStart);
-        newEnd = Math.min(1, newEnd);
+        if (newStart < 0) newStart = 0;
+        if (newEnd > 1) newEnd = 1;
 
         return { start: newStart, end: newEnd };
       });
     };
 
     svgEl.addEventListener("wheel", handleWheel, { passive: false });
-    return () => {
-      svgEl.removeEventListener("wheel", handleWheel);
-    };
-  }, [trades.length]);
+    return () => svgEl.removeEventListener("wheel", handleWheel);
+  }, [trades.length, chartWidth]);
 
-  const handleMouseDown = (e: React.MouseEvent<SVGSVGElement>) => {
-    if (zoomRange.start > 0 || zoomRange.end < 1) {
-      setIsDragging(true);
-      dragStartRef.current = e.clientX;
-      zoomRangeStartOnDragRef.current = { ...zoomRange };
-    }
-  };
-
-  const handleMouseMove = (e: React.MouseEvent<SVGSVGElement, MouseEvent>) => {
-    if (!svgRef.current) return;
-    const rect = svgRef.current.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-
-    const viewBoxX = (mouseX / rect.width) * width;
-
+  const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
     if (isDragging && dragStartRef.current !== null && zoomRangeStartOnDragRef.current !== null) {
+      const svgEl = svgRef.current;
+      if (!svgEl) return;
+      const rect = svgEl.getBoundingClientRect();
       const deltaX = e.clientX - dragStartRef.current;
-      const chartWidthInDOM = rect.width * ((width - padding.left - padding.right) / width);
-      const pctChange = deltaX / chartWidthInDOM;
+      const mainChartWidth = chartWidth - padding.left - padding.right;
+      const deltaPct = (deltaX / rect.width) * (chartWidth / mainChartWidth) * (zoomRangeStartOnDragRef.current.end - zoomRangeStartOnDragRef.current.start);
 
-      const span = zoomRangeStartOnDragRef.current.end - zoomRangeStartOnDragRef.current.start;
-      let newStart = zoomRangeStartOnDragRef.current.start - pctChange * span;
-      let newEnd = zoomRangeStartOnDragRef.current.end - pctChange * span;
+      let newStart = zoomRangeStartOnDragRef.current.start - deltaPct;
+      let newEnd = zoomRangeStartOnDragRef.current.end - deltaPct;
 
+      const span = newEnd - newStart;
       if (newStart < 0) {
         newStart = 0;
         newEnd = span;
@@ -144,20 +129,52 @@ export function InteractiveAggressionChart({ trades }: { trades: Trade[] }) {
       }
 
       setZoomRange({ start: newStart, end: newEnd });
+      return;
     }
 
-    const chartWidth = width - padding.left - padding.right;
-    const relativeX = viewBoxX - padding.left;
-    const pct = Math.max(0, Math.min(1, relativeX / chartWidth));
-    const visibleLength = endIndex - startIndex;
-    const index = startIndex + Math.round(pct * visibleLength);
+    const svgEl = svgRef.current;
+    if (!svgEl) return;
 
-    if (index >= startIndex && index <= endIndex && index < trades.length) {
-      setHoveredIndex(index);
-      setTooltipPos({ x: mouseX + 15, y: mouseY - 15 });
-    } else {
+    const rect = svgEl.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    const viewBoxX = (mouseX / rect.width) * chartWidth;
+    const viewBoxY = (mouseY / rect.height) * height;
+
+    if (
+      viewBoxX < padding.left ||
+      viewBoxX > chartWidth - padding.right ||
+      viewBoxY < padding.top ||
+      viewBoxY > height - padding.bottom
+    ) {
       setHoveredIndex(null);
       setTooltipPos(null);
+      return;
+    }
+
+    const mainChartWidth = chartWidth - padding.left - padding.right;
+    const relativeX = viewBoxX - padding.left;
+    const pct = Math.max(0, Math.min(1, relativeX / mainChartWidth));
+    const rawIndex = startIndex + Math.round(pct * (endIndex - startIndex));
+
+    const index = Math.max(startIndex, Math.min(endIndex, rawIndex));
+    setHoveredIndex(index);
+
+    const tooltipWidth = 180;
+    let tooltipX = mouseX + 15;
+    if (tooltipX + tooltipWidth > rect.width) {
+      tooltipX = mouseX - tooltipWidth - 15;
+    }
+
+    setTooltipPos({ x: Math.max(10, tooltipX), y: Math.max(10, mouseY - 40) });
+  };
+
+  const handleMouseDown = (e: React.MouseEvent<SVGSVGElement>) => {
+    if (zoomRange.start > 0 || zoomRange.end < 1) {
+      setIsDragging(true);
+      dragStartRef.current = e.clientX;
+      zoomRangeStartOnDragRef.current = { ...zoomRange };
     }
   };
 
@@ -183,8 +200,12 @@ export function InteractiveAggressionChart({ trades }: { trades: Trade[] }) {
   const isZoomed = zoomRange.start > 0 || zoomRange.end < 1;
 
   return (
-    <div className="relative w-full h-full flex flex-col">
-      <div className="flex gap-4 items-center justify-end px-4 mb-2 text-xs">
+    <div className="flex flex-col h-full w-full bg-zinc-950/80 rounded-xl border border-zinc-800/80 p-4 shadow-2xl backdrop-blur-xl">
+      <div className="flex items-center justify-between gap-2 mb-3 text-xs">
+        <div className="flex items-center gap-2">
+          <span className="font-semibold text-zinc-200 tracking-wide text-sm">Aggression Trend (Volume/OI)</span>
+          <span className="text-zinc-500 text-[11px] font-mono">({trades.length} pts, Full Day)</span>
+        </div>
         {isZoomed && (
           <button
             onClick={resetZoom}
@@ -195,10 +216,12 @@ export function InteractiveAggressionChart({ trades }: { trades: Trade[] }) {
         )}
       </div>
 
-      <div className="relative flex-1">
+      <div className="relative flex-1 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-zinc-900">
         <svg
           ref={svgRef}
-          viewBox={`0 0 ${width} ${height}`}
+          width={chartWidth}
+          height={height}
+          viewBox={`0 0 ${chartWidth} ${height}`}
           className={`w-full h-full select-none ${isZoomed ? (isDragging ? "cursor-grabbing" : "cursor-grab") : ""}`}
           onMouseMove={handleMouseMove}
           onMouseLeave={handleMouseLeave}
@@ -211,7 +234,7 @@ export function InteractiveAggressionChart({ trades }: { trades: Trade[] }) {
             const val = yMax - p * (yMax - yMin);
             return (
               <g key={i}>
-                <line x1={padding.left} y1={y} x2={width - padding.right} y2={y} stroke="#3f3f46" strokeDasharray="3,3" className="opacity-20" />
+                <line x1={padding.left} y1={y} x2={chartWidth - padding.right} y2={y} stroke="#3f3f46" strokeDasharray="3,3" className="opacity-20" />
                 <text x={padding.left - 8} y={y + 4} fill="#ffffff" fontSize={9} textAnchor="end" className="font-mono opacity-90">
                   {val.toFixed(2)}
                 </text>

@@ -14,6 +14,15 @@ import { InteractiveAggressionChart } from "@/components/InteractiveAggressionCh
 import { InteractiveMaxPainChart } from "@/components/InteractiveMaxPainChart";
 import { api } from "@/lib/api";
 
+const getYesterdayString = () => {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
 export default function Dashboard() {
   // Authentication State
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -32,7 +41,7 @@ export default function Dashboard() {
   const [countdown, setCountdown] = useState(60);
 
   // Date-Filtered History States
-  const [historyDate, setHistoryDate] = useState<string>(() => new Date().toISOString().split("T")[0]);
+  const [historyDate, setHistoryDate] = useState<string>(() => getYesterdayString());
   const [historyTrades, setHistoryTrades] = useState<Trade[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [selectedHistoryTrade, setSelectedHistoryTrade] = useState<Trade | null>(null);
@@ -129,10 +138,11 @@ export default function Dashboard() {
   useEffect(() => {
     if (!isAuthenticated || !token) return;
 
-    // Fetch initial history
+    // Fetch initial history for today
     const fetchHistory = async () => {
       try {
-        const data = await api.trades.getAll({ limit: 50 });
+        const todayStr = new Date().toISOString().split("T")[0];
+        const data = await api.trades.getAll({ limit: 500, date: todayStr });
         setTrades(data);
         if (data.length > 0) {
           const latest = data[data.length - 1];
@@ -179,7 +189,7 @@ export default function Dashboard() {
               const combined = [...prev, ...missedTrades];
               // Remove duplicates based on ID
               const unique = Array.from(new Map(combined.map(t => [t.id, t])).values());
-              return unique.slice(-100); // Keep last 100
+              return unique.slice(-500); // Keep whole day trades
             });
             const last = missedTrades[missedTrades.length - 1];
             setLatestTrade(last);
@@ -198,7 +208,7 @@ export default function Dashboard() {
           const newTrade: Trade = payload.data;
           setLatestTrade(newTrade);
           lastTradeIdRef.current = newTrade.id;
-          setTrades((prev) => [...prev, newTrade].slice(-100));
+          setTrades((prev) => [...prev, newTrade].slice(-500));
         } else if (payload.type === "countdown:tick") {
           setCountdown(payload.data.secondsRemaining);
         }
@@ -386,6 +396,7 @@ export default function Dashboard() {
                   <input
                     type="date"
                     value={historyDate}
+                    max={getYesterdayString()}
                     onChange={(e) => setHistoryDate(e.target.value)}
                     className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-1.5 text-sm text-white focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500 font-medium"
                   />
