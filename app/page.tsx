@@ -96,6 +96,7 @@ export default function Dashboard() {
 
   const socketRef = useRef<WebSocket | null>(null);
   const lastTradeIdRef = useRef<number | null>(null);
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // 1. Initial Authentication Check
   useEffect(() => {
@@ -169,6 +170,10 @@ export default function Dashboard() {
     connectWebSocket();
 
     return () => {
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
       if (socketRef.current) {
         socketRef.current.close();
       }
@@ -177,6 +182,10 @@ export default function Dashboard() {
 
   // WebSocket Connection & Gap Recovery Logic
   const connectWebSocket = () => {
+    if (socketRef.current && (socketRef.current.readyState === WebSocket.OPEN || socketRef.current.readyState === WebSocket.CONNECTING)) {
+      return;
+    }
+
     setConnectionStatus("connecting");
     let baseUrl = process.env.NEXT_PUBLIC_WS_URL;
     if (!baseUrl) {
@@ -190,6 +199,10 @@ export default function Dashboard() {
     ws.onopen = async () => {
       setConnectionStatus("connected");
       console.log("WebSocket connection established");
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
 
       // Backfill any trades missed during connection gap
       if (lastTradeIdRef.current) {
@@ -233,13 +246,17 @@ export default function Dashboard() {
 
     ws.onclose = () => {
       setConnectionStatus("disconnected");
-      console.log("WebSocket connection closed, retrying in 5 seconds...");
-      setTimeout(connectWebSocket, 5000);
+      if (!reconnectTimeoutRef.current) {
+        console.log("WebSocket connection closed, retrying in 5 seconds...");
+        reconnectTimeoutRef.current = setTimeout(() => {
+          reconnectTimeoutRef.current = null;
+          connectWebSocket();
+        }, 5000);
+      }
     };
 
-    ws.onerror = (err) => {
-      console.error("WebSocket error:", err);
-      ws.close();
+    ws.onerror = () => {
+      console.warn("WebSocket connection issue encountered.");
     };
   };
 
@@ -328,6 +345,9 @@ export default function Dashboard() {
     })
     .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
+  const v2ChartTrades = todaysTrades.length > 0 ? todaysTrades : trades;
+  const v1ChartTrades = v1TodaysTrades.length > 0 ? v1TodaysTrades : v1Trades;
+
   // Dashboard Live UI
   return (
     <div className="min-h-screen bg-zinc-950 font-sans text-white selection:bg-cyan-500 selection:text-black">
@@ -388,6 +408,7 @@ export default function Dashboard() {
                 </div>
                 <div className="flex items-center gap-2 bg-zinc-950 p-1 rounded-lg border border-zinc-850">
                   <button
+                    type="button"
                     onClick={() => setChartEngine("v2")}
                     className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
                       chartEngine === "v2"
@@ -398,6 +419,7 @@ export default function Dashboard() {
                     V2 Active Engine
                   </button>
                   <button
+                    type="button"
                     onClick={() => setChartEngine("v1")}
                     className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
                       chartEngine === "v1"
@@ -421,20 +443,20 @@ export default function Dashboard() {
                     </span>
                   </h4>
                   <div className="aspect-[4/3] rounded bg-zinc-950 p-4 border border-zinc-900 flex items-center justify-center">
-                    <InteractiveTradingChart trades={chartEngine === "v2" ? todaysTrades : v1TodaysTrades} />
+                    <InteractiveTradingChart trades={chartEngine === "v2" ? v2ChartTrades : v1ChartTrades} />
                   </div>
                 </div>
                 <div className="rounded-xl border border-zinc-900 bg-zinc-900/30 p-6">
                   <h4 className="text-md font-semibold text-zinc-400 mb-4 flex items-center justify-between">
                     <span>
-                      {chartEngine === "v2" ? "Buyer Aggression Trend (CE vs PE)" : "V2 Buyer Aggression Trend (CE vs PE)"}
+                      {chartEngine === "v2" ? "Buyer Aggression Trend (CE vs PE)" : "V1 Legacy Buyer Aggression Trend (CE vs PE)"}
                     </span>
                     <span className="text-[10px] uppercase font-bold text-zinc-600 bg-zinc-900/60 px-2 py-0.5 rounded">
                       Interactive
                     </span>
                   </h4>
                   <div className="aspect-[4/3] rounded bg-zinc-950 p-4 border border-zinc-900 flex items-center justify-center">
-                    <InteractiveAggressionChart trades={todaysTrades} />
+                    <InteractiveAggressionChart trades={chartEngine === "v2" ? v2ChartTrades : v1ChartTrades} />
                   </div>
                 </div>
                 <div className="rounded-xl border border-zinc-900 bg-zinc-900/30 p-6 md:col-span-2">
@@ -447,7 +469,7 @@ export default function Dashboard() {
                     </span>
                   </h4>
                   <div className="w-full aspect-[16/9] rounded bg-zinc-950 p-4 border border-zinc-900 flex items-center justify-center">
-                    <InteractiveMaxPainChart trades={chartEngine === "v2" ? todaysTrades : v1TodaysTrades} />
+                    <InteractiveMaxPainChart trades={chartEngine === "v2" ? v2ChartTrades : v1ChartTrades} />
                   </div>
                 </div>
               </div>

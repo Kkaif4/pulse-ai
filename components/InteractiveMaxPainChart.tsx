@@ -11,14 +11,6 @@ export function InteractiveMaxPainChart({ trades }: { trades: (Trade | OldVersio
   const dragStartRef = useRef<number | null>(null);
   const zoomRangeStartOnDragRef = useRef<{ start: number; end: number } | null>(null);
 
-  if (trades.length === 0) {
-    return (
-      <div className="flex h-full w-full items-center justify-center text-zinc-500 text-xs py-12">
-        No data points logged. Waiting for live feed...
-      </div>
-    );
-  }
-
   const startIndex = Math.max(0, Math.floor(zoomRange.start * (trades.length - 1)));
   const endIndex = Math.min(trades.length - 1, Math.ceil(zoomRange.end * (trades.length - 1)));
   const visibleTrades = trades.slice(startIndex, endIndex + 1);
@@ -105,6 +97,14 @@ export function InteractiveMaxPainChart({ trades }: { trades: (Trade | OldVersio
     svgEl.addEventListener("wheel", handleWheel, { passive: false });
     return () => svgEl.removeEventListener("wheel", handleWheel);
   }, [trades.length, chartWidth]);
+
+  if (trades.length === 0) {
+    return (
+      <div className="flex h-full w-full items-center justify-center text-zinc-500 text-xs py-12">
+        No data points logged. Waiting for live feed...
+      </div>
+    );
+  }
 
   const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
     if (isDragging && dragStartRef.current !== null && zoomRangeStartOnDragRef.current !== null) {

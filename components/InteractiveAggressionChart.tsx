@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
-import { Trade } from "../types";
+import { Trade, OldVersionTrade } from "../types";
 
-export function InteractiveAggressionChart({ trades }: { trades: Trade[] }) {
+export function InteractiveAggressionChart({ trades }: { trades: (Trade | OldVersionTrade)[] }) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -11,13 +11,7 @@ export function InteractiveAggressionChart({ trades }: { trades: Trade[] }) {
   const dragStartRef = useRef<number | null>(null);
   const zoomRangeStartOnDragRef = useRef<{ start: number; end: number } | null>(null);
 
-  if (trades.length === 0) {
-    return (
-      <div className="flex h-full w-full items-center justify-center text-zinc-500 text-xs py-12">
-        No data points logged. Waiting for live feed...
-      </div>
-    );
-  }
+  const hasAggressionData = trades.some((t) => "avgCeAggr" in t && (t as any).avgCeAggr !== undefined);
 
   const startIndex = Math.max(0, Math.floor(zoomRange.start * (trades.length - 1)));
   const endIndex = Math.min(trades.length - 1, Math.ceil(zoomRange.end * (trades.length - 1)));
@@ -27,8 +21,8 @@ export function InteractiveAggressionChart({ trades }: { trades: Trade[] }) {
   const height = 300;
   const padding = { top: 20, right: 45, bottom: 35, left: 55 };
 
-  const ceAggrs = visibleTrades.map((t) => Number(t.avgCeAggr));
-  const peAggrs = visibleTrades.map((t) => Number(t.avgPeAggr));
+  const ceAggrs = visibleTrades.map((t) => Number((t as any).avgCeAggr || 0));
+  const peAggrs = visibleTrades.map((t) => Number((t as any).avgPeAggr || 0));
 
   const minVal = Math.min(...ceAggrs, ...peAggrs);
   const maxVal = Math.max(...ceAggrs, ...peAggrs);
@@ -53,8 +47,8 @@ export function InteractiveAggressionChart({ trades }: { trades: Trade[] }) {
   visibleTrades.forEach((t, i) => {
     const absoluteIndex = startIndex + i;
     const x = getX(absoluteIndex);
-    const yCe = getY(Number(t.avgCeAggr));
-    const yPe = getY(Number(t.avgPeAggr));
+    const yCe = getY(Number((t as any).avgCeAggr || 0));
+    const yPe = getY(Number((t as any).avgPeAggr || 0));
 
     if (i === 0) {
       cePath = `M ${x} ${yCe}`;
@@ -105,6 +99,24 @@ export function InteractiveAggressionChart({ trades }: { trades: Trade[] }) {
     svgEl.addEventListener("wheel", handleWheel, { passive: false });
     return () => svgEl.removeEventListener("wheel", handleWheel);
   }, [trades.length, chartWidth]);
+
+  if (trades.length === 0) {
+    return (
+      <div className="flex h-full w-full items-center justify-center text-zinc-500 text-xs py-12">
+        No data points logged. Waiting for live feed...
+      </div>
+    );
+  }
+
+  if (!hasAggressionData) {
+    return (
+      <div className="flex h-full w-full flex-col items-center justify-center text-zinc-500 text-xs py-12 text-center px-4">
+        <span className="text-lg mb-1">📊</span>
+        <span>CE/PE Aggression data is not tracked by the V1 Legacy Engine.</span>
+        <span className="text-[10px] text-zinc-600 mt-1">Switch to V2 Active Engine to view volume/OI aggression trends.</span>
+      </div>
+    );
+  }
 
   const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
     if (isDragging && dragStartRef.current !== null && zoomRangeStartOnDragRef.current !== null) {
@@ -259,8 +271,8 @@ export function InteractiveAggressionChart({ trades }: { trades: Trade[] }) {
                 stroke="#52525b"
                 strokeDasharray="2,2"
               />
-              <circle cx={getX(hoveredIndex)} cy={getY(Number(hoveredTrade.avgCeAggr))} r={4} fill="#22c55e" stroke="#fff" strokeWidth={1} />
-              <circle cx={getX(hoveredIndex)} cy={getY(Number(hoveredTrade.avgPeAggr))} r={4} fill="#ef4444" stroke="#fff" strokeWidth={1} />
+              <circle cx={getX(hoveredIndex)} cy={getY(Number((hoveredTrade as any).avgCeAggr || 0))} r={4} fill="#22c55e" stroke="#fff" strokeWidth={1} />
+              <circle cx={getX(hoveredIndex)} cy={getY(Number((hoveredTrade as any).avgPeAggr || 0))} r={4} fill="#ef4444" stroke="#fff" strokeWidth={1} />
             </g>
           )}
         </svg>
@@ -274,11 +286,11 @@ export function InteractiveAggressionChart({ trades }: { trades: Trade[] }) {
             <div className="text-zinc-500 font-mono mb-1">{new Date(hoveredTrade.timestamp).toLocaleTimeString()}</div>
             <div className="flex justify-between gap-4 text-green-400 font-medium">
               <span>Call Aggr (CE):</span>
-              <span className="font-mono font-bold">{Number(hoveredTrade.avgCeAggr).toFixed(2)}</span>
+              <span className="font-mono font-bold">{Number((hoveredTrade as any).avgCeAggr || 0).toFixed(2)}</span>
             </div>
             <div className="flex justify-between gap-4 text-red-400 font-medium">
               <span>Put Aggr (PE):</span>
-              <span className="font-mono font-bold">{Number(hoveredTrade.avgPeAggr).toFixed(2)}</span>
+              <span className="font-mono font-bold">{Number((hoveredTrade as any).avgPeAggr || 0).toFixed(2)}</span>
             </div>
           </div>
         )}
