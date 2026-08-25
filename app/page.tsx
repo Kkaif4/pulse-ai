@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { Trade } from "@/types";
+import { Trade, OldVersionTrade } from "@/types";
 import { AuthForm } from "@/components/AuthForm";
 import { NavigationHeader } from "@/components/NavigationHeader";
 import { LiveEngineCard } from "@/components/LiveEngineCard";
 import { KPIStatsCards } from "@/components/KPIStatsCards";
 import { ExecutionFeedTable } from "@/components/ExecutionFeedTable";
+import { V1ExecutionFeedTable } from "@/components/V1ExecutionFeedTable";
 import { HistoricalTradesTable } from "@/components/HistoricalTradesTable";
 import { TradeDetailsModal } from "@/components/TradeDetailsModal";
 import { InteractiveTradingChart } from "@/components/InteractiveTradingChart";
@@ -34,9 +35,11 @@ export default function Dashboard() {
 
   // Live Data & Connection State
   const [trades, setTrades] = useState<Trade[]>([]);
+  const [v1Trades, setV1Trades] = useState<OldVersionTrade[]>([]);
   const [latestTrade, setLatestTrade] = useState<Trade | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<"connecting" | "connected" | "disconnected">("disconnected");
-  const [activeTab, setActiveTab] = useState<"overview" | "charts" | "history">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "charts" | "v1_engine" | "history">("overview");
+  const [chartEngine, setChartEngine] = useState<"v2" | "v1">("v2");
   const [marketOpen, setMarketOpen] = useState(false);
   const [countdown, setCountdown] = useState(60);
 
@@ -130,12 +133,28 @@ export default function Dashboard() {
   useEffect(() => {
     if (!isAuthenticated || !token) return;
 
-    // Fetch initial history for today
+    // Fetch initial history for today (or fallback to latest session trades)
     const fetchHistory = async () => {
       try {
-        const todayStr = new Date().toISOString().split("T")[0];
-        const data = await api.trades.getAll({ limit: 500, date: todayStr });
+        const d = new Date();
+        const utc = d.getTime() + d.getTimezoneOffset() * 60000;
+        const ist = new Date(utc + 3600000 * 5.5);
+        const todayStr = `${ist.getFullYear()}-${String(ist.getMonth() + 1).padStart(2, "0")}-${String(ist.getDate()).padStart(2, "0")}`;
+
+        let [data, v1Data] = await Promise.all([
+          api.trades.getAll({ limit: 500, date: todayStr }),
+          api.trades.getV1All({ limit: 500, date: todayStr }),
+        ]);
+
+        if (data.length === 0) {
+          data = await api.trades.getAll({ limit: 500 });
+        }
+        if (v1Data.length === 0) {
+          v1Data = await api.trades.getV1All({ limit: 500 });
+        }
+
         setTrades(data);
+        setV1Trades(v1Data);
         if (data.length > 0) {
           const latest = data[0];
           setLatestTrade(latest);
@@ -201,6 +220,9 @@ export default function Dashboard() {
           setLatestTrade(newTrade);
           lastTradeIdRef.current = newTrade.id;
           setTrades((prev) => [newTrade, ...prev].slice(0, 500));
+        } else if (payload.type === "trade_v1:new") {
+          const newV1Trade: OldVersionTrade = payload.data;
+          setV1Trades((prev) => [newV1Trade, ...prev].slice(0, 500));
         } else if (payload.type === "countdown:tick") {
           setCountdown(payload.data.secondsRemaining);
         }
@@ -281,16 +303,30 @@ export default function Dashboard() {
     );
   }
 
-  // Filter today's trades for the charts view
-  const todaysTrades = trades.filter((t) => {
-    const tradeDate = new Date(t.timestamp);
-    const today = new Date();
-    return (
-      tradeDate.getDate() === today.getDate() &&
-      tradeDate.getMonth() === today.getMonth() &&
-      tradeDate.getFullYear() === today.getFullYear()
-    );
-  });
+  // Filter today's trades for the charts view (sorted ascending by time so charts render left-to-right)
+  const todaysTrades = trades
+    .filter((t) => {
+      const tradeDate = new Date(t.timestamp);
+      const today = new Date();
+      return (
+        tradeDate.getDate() === today.getDate() &&
+        tradeDate.getMonth() === today.getMonth() &&
+        tradeDate.getFullYear() === today.getFullYear()
+      );
+    })
+    .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+  const v1TodaysTrades = v1Trades
+    .filter((t) => {
+      const tradeDate = new Date(t.timestamp);
+      const today = new Date();
+      return (
+        tradeDate.getDate() === today.getDate() &&
+        tradeDate.getMonth() === today.getMonth() &&
+        tradeDate.getFullYear() === today.getFullYear()
+      );
+    })
+    .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
   // Dashboard Live UI
   return (
@@ -331,44 +367,88 @@ export default function Dashboard() {
               {/* Hero KPI Grid */}
               <KPIStatsCards latestTrade={latestTrade} />
 
-              {/* Feed History Table */}
-              <ExecutionFeedTable trades={trades} />
+              {/* Feed History Table with Signal Comparison */}
+              <ExecutionFeedTable trades={trades} v1Trades={v1Trades} />
             </div>
           )}
 
+          {activeTab === "v1_engine" && (
+            <V1ExecutionFeedTable trades={v1Trades} />
+          )}
+
           {activeTab === "charts" && (
-            <div className="grid gap-6 md:grid-cols-2">
-              <div className="rounded-xl border border-zinc-900 bg-zinc-900/30 p-6">
-                <h4 className="text-md font-semibold text-zinc-400 mb-4 flex items-center justify-between">
-                  <span>Trading Trend (Spot vs PCR)</span>
-                  <span className="text-[10px] uppercase font-bold text-zinc-600 bg-zinc-900/60 px-2 py-0.5 rounded">
-                    Interactive
-                  </span>
-                </h4>
-                <div className="aspect-[4/3] rounded bg-zinc-950 p-4 border border-zinc-900 flex items-center justify-center">
-                  <InteractiveTradingChart trades={todaysTrades} />
+            <div className="space-y-6">
+              {/* Engine Switcher Controls */}
+              <div className="flex items-center justify-between rounded-xl border border-zinc-900 bg-zinc-900/30 p-4">
+                <div>
+                  <h3 className="text-sm font-bold text-white">Select Interactive Chart Engine Source</h3>
+                  <p className="text-xs text-zinc-500 mt-0.5">
+                    Switch chart visualization between V2 Active Engine and V1 Legacy Engine data
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 bg-zinc-950 p-1 rounded-lg border border-zinc-850">
+                  <button
+                    onClick={() => setChartEngine("v2")}
+                    className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                      chartEngine === "v2"
+                        ? "bg-cyan-500 text-black shadow font-bold"
+                        : "text-zinc-400 hover:text-white"
+                    }`}
+                  >
+                    V2 Active Engine
+                  </button>
+                  <button
+                    onClick={() => setChartEngine("v1")}
+                    className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                      chartEngine === "v1"
+                        ? "bg-amber-500 text-black shadow font-bold"
+                        : "text-zinc-400 hover:text-white"
+                    }`}
+                  >
+                    V1 Legacy Engine
+                  </button>
                 </div>
               </div>
-              <div className="rounded-xl border border-zinc-900 bg-zinc-900/30 p-6">
-                <h4 className="text-md font-semibold text-zinc-400 mb-4 flex items-center justify-between">
-                  <span>Buyer Aggression Trend (CE vs PE)</span>
-                  <span className="text-[10px] uppercase font-bold text-zinc-600 bg-zinc-900/60 px-2 py-0.5 rounded">
-                    Interactive
-                  </span>
-                </h4>
-                <div className="aspect-[4/3] rounded bg-zinc-950 p-4 border border-zinc-900 flex items-center justify-center">
-                  <InteractiveAggressionChart trades={todaysTrades} />
+
+              <div className="grid gap-6 md:grid-cols-2">
+                <div className="rounded-xl border border-zinc-900 bg-zinc-900/30 p-6">
+                  <h4 className="text-md font-semibold text-zinc-400 mb-4 flex items-center justify-between">
+                    <span>
+                      {chartEngine === "v2" ? "Trading Trend (Spot vs PCR)" : "V1 Legacy Trading Trend (Spot vs PCR)"}
+                    </span>
+                    <span className="text-[10px] uppercase font-bold text-zinc-600 bg-zinc-900/60 px-2 py-0.5 rounded">
+                      Interactive
+                    </span>
+                  </h4>
+                  <div className="aspect-[4/3] rounded bg-zinc-950 p-4 border border-zinc-900 flex items-center justify-center">
+                    <InteractiveTradingChart trades={chartEngine === "v2" ? todaysTrades : v1TodaysTrades} />
+                  </div>
                 </div>
-              </div>
-              <div className="rounded-xl border border-zinc-900 bg-zinc-900/30 p-6 md:col-span-2">
-                <h4 className="text-md font-semibold text-zinc-400 mb-4 flex items-center justify-between">
-                  <span>Max Pain vs Spot Price Level</span>
-                  <span className="text-[10px] uppercase font-bold text-zinc-600 bg-zinc-900/60 px-2 py-0.5 rounded">
-                    Interactive
-                  </span>
-                </h4>
-                <div className="w-full aspect-[21/9] rounded bg-zinc-950 p-4 border border-zinc-900 flex items-center justify-center">
-                  <InteractiveMaxPainChart trades={todaysTrades} />
+                <div className="rounded-xl border border-zinc-900 bg-zinc-900/30 p-6">
+                  <h4 className="text-md font-semibold text-zinc-400 mb-4 flex items-center justify-between">
+                    <span>
+                      {chartEngine === "v2" ? "Buyer Aggression Trend (CE vs PE)" : "V2 Buyer Aggression Trend (CE vs PE)"}
+                    </span>
+                    <span className="text-[10px] uppercase font-bold text-zinc-600 bg-zinc-900/60 px-2 py-0.5 rounded">
+                      Interactive
+                    </span>
+                  </h4>
+                  <div className="aspect-[4/3] rounded bg-zinc-950 p-4 border border-zinc-900 flex items-center justify-center">
+                    <InteractiveAggressionChart trades={todaysTrades} />
+                  </div>
+                </div>
+                <div className="rounded-xl border border-zinc-900 bg-zinc-900/30 p-6 md:col-span-2">
+                  <h4 className="text-md font-semibold text-zinc-400 mb-4 flex items-center justify-between">
+                    <span>
+                      {chartEngine === "v2" ? "Max Pain vs Spot Price Level" : "V1 Legacy Max Pain vs Spot Price Level"}
+                    </span>
+                    <span className="text-[10px] uppercase font-bold text-zinc-600 bg-zinc-900/60 px-2 py-0.5 rounded">
+                      Interactive
+                    </span>
+                  </h4>
+                  <div className="w-full aspect-[16/9] rounded bg-zinc-950 p-4 border border-zinc-900 flex items-center justify-center">
+                    <InteractiveMaxPainChart trades={chartEngine === "v2" ? todaysTrades : v1TodaysTrades} />
+                  </div>
                 </div>
               </div>
             </div>

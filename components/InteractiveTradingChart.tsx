@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
-import { Trade } from "../types";
+import { Trade, OldVersionTrade } from "../types";
 
-export function InteractiveTradingChart({ trades }: { trades: Trade[] }) {
+export function InteractiveTradingChart({ trades }: { trades: (Trade | OldVersionTrade)[] }) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null);
   const [showSpot, setShowSpot] = useState<boolean>(true);

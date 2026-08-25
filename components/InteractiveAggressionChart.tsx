@@ -222,7 +222,7 @@ export function InteractiveAggressionChart({ trades }: { trades: Trade[] }) {
           width={chartWidth}
           height={height}
           viewBox={`0 0 ${chartWidth} ${height}`}
-          className={`w-full h-full select-none ${isZoomed ? (isDragging ? "cursor-grabbing" : "cursor-grab") : ""}`}
+          className={`h-full max-w-none select-none ${isZoomed ? (isDragging ? "cursor-grabbing" : "cursor-grab") : ""}`}
           onMouseMove={handleMouseMove}
           onMouseLeave={handleMouseLeave}
           onMouseDown={handleMouseDown}

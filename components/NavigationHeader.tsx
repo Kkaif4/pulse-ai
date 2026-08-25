@@ -7,8 +7,8 @@ interface NavigationHeaderProps {
   countdown: number;
   username: string;
   onLogout: () => void;
-  activeTab: "overview" | "charts" | "history";
-  setActiveTab: (tab: "overview" | "charts" | "history") => void;
+  activeTab: "overview" | "charts" | "v1_engine" | "history";
+  setActiveTab: (tab: "overview" | "charts" | "v1_engine" | "history") => void;
 }
 
 export function NavigationHeader({
@@ -95,6 +95,14 @@ export function NavigationHeader({
             }`}
           >
             Interactive Charts
+          </button>
+          <button
+            onClick={() => setActiveTab("v1_engine")}
+            className={`border-b-2 px-6 py-3 font-semibold text-sm flex items-center gap-2 ${
+              activeTab === "v1_engine" ? "border-amber-500 text-amber-400 font-bold" : "border-transparent text-zinc-500 hover:text-amber-300"
+            }`}
+          >
+            <span>V1 Engine (Legacy)</span>
           </button>
           <button
             onClick={() => setActiveTab("history")}

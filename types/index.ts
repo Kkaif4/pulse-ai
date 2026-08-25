@@ -25,3 +25,20 @@ export interface Trade {
   actionableSignal: string;
   summary: string;
 }
+
+export interface OldVersionTrade {
+  id: number;
+  timestamp: string;
+  spotPrice: number;
+  pcr: number;
+  maxPain: number;
+  support: number;
+  resistance: number;
+  spotTrend: string;
+  emaTrend: string;
+  score: number;
+  sentiment: string;
+  signal: string;
+  actionableSignal: string;
+  summary: string;
+}

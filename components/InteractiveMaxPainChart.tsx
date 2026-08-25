@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
-import { Trade } from "../types";
+import { Trade, OldVersionTrade } from "../types";
 
-export function InteractiveMaxPainChart({ trades }: { trades: Trade[] }) {
+export function InteractiveMaxPainChart({ trades }: { trades: (Trade | OldVersionTrade)[] }) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -222,7 +222,7 @@ export function InteractiveMaxPainChart({ trades }: { trades: Trade[] }) {
           width={chartWidth}
           height={height}
           viewBox={`0 0 ${chartWidth} ${height}`}
-          className={`w-full h-full select-none ${isZoomed ? (isDragging ? "cursor-grabbing" : "cursor-grab") : ""}`}
+          className={`h-full max-w-none select-none ${isZoomed ? (isDragging ? "cursor-grabbing" : "cursor-grab") : ""}`}
           onMouseMove={handleMouseMove}
           onMouseLeave={handleMouseLeave}
           onMouseDown={handleMouseDown}

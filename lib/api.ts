@@ -40,6 +40,10 @@ export const api = {
       const { data } = await apiClient.get("/trades", { params });
       return data;
     },
+    getV1All: async (params?: { since?: number | null; date?: string; limit?: number }) => {
+      const { data } = await apiClient.get("/trades/v1", { params });
+      return data;
+    },
     getLatest: async () => {
       const { data } = await apiClient.get("/trades/latest");
       return data;
