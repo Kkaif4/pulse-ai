@@ -42,7 +42,7 @@ export function ExecutionFeedTable({ trades }: ExecutionFeedTableProps) {
                 </td>
               </tr>
             ) : (
-              [...todaysTrades].reverse().map((t) => (
+              todaysTrades.map((t) => (
                 <tr key={t.id} className="hover:bg-zinc-900/30">
                   <td className="py-3 px-4 text-white">{new Date(t.timestamp).toLocaleTimeString()}</td>
                   <td className="py-3 px-4 font-mono font-semibold">{Number(t.spotPrice).toFixed(2)}</td>
@@ -81,7 +81,7 @@ export function ExecutionFeedTable({ trades }: ExecutionFeedTableProps) {
             No data points logged today. Waiting for cron execution...
           </p>
         ) : (
-          [...todaysTrades].reverse().map((t) => (
+          todaysTrades.map((t) => (
             <div key={t.id} className="rounded-lg border border-zinc-900 bg-zinc-950/40 p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-white">{new Date(t.timestamp).toLocaleTimeString()}</span>

@@ -91,14 +91,6 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, []);
 
-  // Countdown timer fallback decrementer (keeps the UI ticking smoothly between WS updates)
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCountdown((prev) => (prev > 0 ? prev - 1 : 0));
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
-
   const socketRef = useRef<WebSocket | null>(null);
   const lastTradeIdRef = useRef<number | null>(null);
 
@@ -145,7 +137,7 @@ export default function Dashboard() {
         const data = await api.trades.getAll({ limit: 500, date: todayStr });
         setTrades(data);
         if (data.length > 0) {
-          const latest = data[data.length - 1];
+          const latest = data[0];
           setLatestTrade(latest);
           lastTradeIdRef.current = latest.id;
         }
@@ -186,12 +178,12 @@ export default function Dashboard() {
           const missedTrades: Trade[] = await api.trades.getAll({ since: lastTradeIdRef.current });
           if (missedTrades.length > 0) {
             setTrades((prev) => {
-              const combined = [...prev, ...missedTrades];
+              const combined = [...missedTrades, ...prev];
               // Remove duplicates based on ID
               const unique = Array.from(new Map(combined.map(t => [t.id, t])).values());
-              return unique.slice(-500); // Keep whole day trades
+              return unique.slice(0, 500); // Keep whole day trades (newest on top)
             });
-            const last = missedTrades[missedTrades.length - 1];
+            const last = missedTrades[0];
             setLatestTrade(last);
             lastTradeIdRef.current = last.id;
           }
@@ -208,7 +200,7 @@ export default function Dashboard() {
           const newTrade: Trade = payload.data;
           setLatestTrade(newTrade);
           lastTradeIdRef.current = newTrade.id;
-          setTrades((prev) => [...prev, newTrade].slice(-500));
+          setTrades((prev) => [newTrade, ...prev].slice(0, 500));
         } else if (payload.type === "countdown:tick") {
           setCountdown(payload.data.secondsRemaining);
         }
