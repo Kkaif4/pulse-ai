@@ -1,13 +1,17 @@
 import React from "react";
-import { Trade } from "../types";
+import { LegacyTrade } from "../types";
 
-interface ExecutionFeedTableProps {
-  trades: Trade[];
+interface LegacyExecutionFeedTableProps {
+  trades: LegacyTrade[];
   onSelectTrade?: (timestamp: string) => void;
-  onSelectSentiment?: (trade: Trade) => void;
+  onSelectSentiment?: (trade: LegacyTrade) => void;
 }
 
-export function ExecutionFeedTable({ trades, onSelectTrade, onSelectSentiment }: ExecutionFeedTableProps) {
+export function LegacyExecutionFeedTable({
+  trades,
+  onSelectTrade,
+  onSelectSentiment,
+}: LegacyExecutionFeedTableProps) {
   const todaysTrades = trades.filter((t) => {
     const tradeDate = new Date(t.timestamp);
     const today = new Date();
@@ -24,13 +28,13 @@ export function ExecutionFeedTable({ trades, onSelectTrade, onSelectSentiment }:
     <div className="rounded-xl border border-zinc-900 bg-zinc-900/20 p-4">
       <div className="flex items-center justify-between mb-3">
         <div>
-          <h3 className="text-base font-bold tracking-tight text-cyan-400 flex items-center gap-2">
-            <span>Active V2 Engine</span>
+          <h3 className="text-base font-bold tracking-tight text-purple-400 flex items-center gap-2">
+            <span>🏛️ Legacy Engine</span>
           </h3>
-          <p className="text-xs text-zinc-500 mt-0.5">Advanced RSI, ADX, Vectorized Pain &amp; IV Skew</p>
+          <p className="text-xs text-zinc-500 mt-0.5">Classic rule-based PCR &amp; OI heuristic engine</p>
         </div>
-        <span className="rounded bg-cyan-500/10 border border-cyan-500/20 px-2 py-0.5 text-xs font-mono font-bold text-cyan-400">
-          version_2
+        <span className="rounded bg-purple-500/10 border border-purple-500/20 px-2 py-0.5 text-xs font-mono font-bold text-purple-400">
+          legacy_code
         </span>
       </div>
 
@@ -49,7 +53,7 @@ export function ExecutionFeedTable({ trades, onSelectTrade, onSelectSentiment }:
             {displayTrades.length === 0 ? (
               <tr>
                 <td colSpan={5} className="py-6 text-center text-zinc-600">
-                  No Active V2 points logged yet.
+                  No Legacy engine points logged yet.
                 </td>
               </tr>
             ) : (
@@ -104,7 +108,7 @@ export function ExecutionFeedTable({ trades, onSelectTrade, onSelectSentiment }:
                           e.stopPropagation();
                           onSelectSentiment?.(t);
                         }}
-                        className="rounded bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 px-2 py-0.5 text-xs font-semibold text-cyan-300 transition-colors"
+                        className="rounded bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 px-2 py-0.5 text-xs font-semibold text-purple-300 transition-colors"
                       >
                         {t.sentiment || "Sideways"}
                       </button>

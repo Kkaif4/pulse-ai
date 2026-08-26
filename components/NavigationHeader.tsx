@@ -7,8 +7,8 @@ interface NavigationHeaderProps {
   countdown: number;
   username: string;
   onLogout: () => void;
-  activeTab: "overview" | "charts" | "v1_engine" | "history";
-  setActiveTab: (tab: "overview" | "charts" | "v1_engine" | "history") => void;
+  activeTab: "overview" | "charts" | "v1_engine" | "legacy_engine" | "history";
+  setActiveTab: (tab: "overview" | "charts" | "v1_engine" | "legacy_engine" | "history") => void;
 }
 
 export function NavigationHeader({
@@ -23,7 +23,7 @@ export function NavigationHeader({
   return (
     <>
       <header className="border-b border-zinc-900 bg-zinc-900/30 px-6 py-4 backdrop-blur-md">
-        <div className="mx-auto flex max-w-7xl items-center justify-between">
+        <div className="mx-auto flex max-w-[1600px] items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2.5">
               <img src="/favicon-32x32.png" alt="pulseAI logo" className="w-8 h-8 rounded-lg shadow-md border border-zinc-800" />
@@ -33,24 +33,22 @@ export function NavigationHeader({
             </div>
             <div className="flex items-center gap-2 rounded-full bg-zinc-900 px-3 py-1 text-xs">
               <span
-                className={`h-2.5 w-2.5 rounded-full ${
-                  connectionStatus === "connected"
+                className={`h-2.5 w-2.5 rounded-full ${connectionStatus === "connected"
                     ? "bg-green-500 animate-pulse"
                     : connectionStatus === "connecting"
-                    ? "bg-yellow-500"
-                    : "bg-red-500"
-                }`}
+                      ? "bg-yellow-500"
+                      : "bg-red-500"
+                  }`}
               />
               <span className="capitalize text-zinc-400">{connectionStatus}</span>
             </div>
 
             {/* Market Status Badge */}
             <div
-              className={`flex items-center gap-2 rounded-full px-3 py-1 text-xs border transition-all duration-300 ${
-                marketOpen
+              className={`flex items-center gap-2 rounded-full px-3 py-1 text-xs border transition-all duration-300 ${marketOpen
                   ? "bg-cyan-500/10 text-cyan-400 border-cyan-500/20"
                   : "bg-red-500/10 text-red-400 border-red-500/25 animate-pulse"
-              }`}
+                }`}
             >
               <span className={`h-2 w-2 rounded-full ${marketOpen ? "bg-cyan-500 animate-pulse" : "bg-red-500"}`} />
               <span className="font-bold">{marketOpen ? "Market Open" : "Market Closed"}</span>
@@ -58,9 +56,8 @@ export function NavigationHeader({
 
             {/* Countdown Badge */}
             <div
-              className={`flex items-center gap-2 rounded-full px-3 py-1 text-xs border bg-zinc-900/60 ${
-                countdown === 0 ? "border-yellow-500/30 text-yellow-400" : "border-zinc-800 text-zinc-400"
-              }`}
+              className={`flex items-center gap-2 rounded-full px-3 py-1 text-xs border bg-zinc-900/60 ${countdown === 0 ? "border-yellow-500/30 text-yellow-400" : "border-zinc-800 text-zinc-400"
+                }`}
             >
               <span className="font-mono font-semibold">
                 {countdown > 0 ? `Next Tick: ${countdown}s` : "waiting..."}
@@ -81,42 +78,45 @@ export function NavigationHeader({
       </header>
 
       {/* Navigation Tabs */}
-      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
+      <div className="mx-auto max-w-[1600px] px-4 pt-4 sm:px-6">
         <div className="flex border-b border-zinc-900">
           <button
             onClick={() => setActiveTab("overview")}
-            className={`border-b-2 px-6 py-3 font-semibold text-sm ${
-              activeTab === "overview" ? "border-cyan-500 text-white" : "border-transparent text-zinc-500 hover:text-zinc-300"
-            }`}
+            className={`border-b-2 px-6 py-3 font-semibold text-sm ${activeTab === "overview" ? "border-cyan-500 text-white font-bold" : "border-transparent text-zinc-500 hover:text-zinc-300"
+              }`}
           >
-            Overview
+            Multi-Engine Workspace
           </button>
           <button
             onClick={() => setActiveTab("charts")}
-            className={`border-b-2 px-6 py-3 font-semibold text-sm ${
-              activeTab === "charts" ? "border-cyan-500 text-white" : "border-transparent text-zinc-500 hover:text-zinc-300"
-            }`}
+            className={`border-b-2 px-6 py-3 font-semibold text-sm ${activeTab === "charts" ? "border-cyan-500 text-white font-bold" : "border-transparent text-zinc-500 hover:text-zinc-300"
+              }`}
           >
             Interactive Charts
           </button>
           <button
             onClick={() => setActiveTab("v1_engine")}
-            className={`border-b-2 px-6 py-3 font-semibold text-sm flex items-center gap-2 ${
-              activeTab === "v1_engine" ? "border-amber-500 text-amber-400 font-bold" : "border-transparent text-zinc-500 hover:text-amber-300"
-            }`}
+            className={`border-b-2 px-6 py-3 font-semibold text-sm flex items-center gap-2 ${activeTab === "v1_engine" ? "border-amber-500 text-amber-400 font-bold" : "border-transparent text-zinc-500 hover:text-amber-300"
+              }`}
           >
-            <span>V1 Engine (Legacy)</span>
+            <span>V1 Engine</span>
+          </button>
+          <button
+            onClick={() => setActiveTab("legacy_engine")}
+            className={`border-b-2 px-6 py-3 font-semibold text-sm flex items-center gap-2 ${activeTab === "legacy_engine" ? "border-purple-500 text-purple-400 font-bold" : "border-transparent text-zinc-500 hover:text-purple-300"
+              }`}
+          >
+            <span>Legacy Engine</span>
           </button>
           <button
             onClick={() => setActiveTab("history")}
-            className={`border-b-2 px-6 py-3 font-semibold text-sm ${
-              activeTab === "history" ? "border-cyan-500 text-white" : "border-transparent text-zinc-500 hover:text-zinc-300"
-            }`}
+            className={`border-b-2 px-6 py-3 font-semibold text-sm ${activeTab === "history" ? "border-cyan-500 text-white font-bold" : "border-transparent text-zinc-500 hover:text-zinc-300"
+              }`}
           >
             History
           </button>
         </div>
-      </main>
+      </div>
     </>
   );
 }

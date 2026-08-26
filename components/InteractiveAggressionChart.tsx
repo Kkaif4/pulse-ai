@@ -140,7 +140,7 @@ export function InteractiveAggressionChart({ trades }: { trades: (Trade | OldVer
     return (
       <div className="flex h-full w-full flex-col items-center justify-center text-zinc-500 text-xs py-12 text-center px-4">
         <span className="text-lg mb-1">📊</span>
-        <span>CE/PE Aggression data is not tracked by the V1 Legacy Engine.</span>
+        <span>CE/PE Aggression data is not tracked by the V1 Engine.</span>
         <span className="text-[10px] text-zinc-600 mt-1">Switch to V2 Active Engine to view volume/OI aggression trends.</span>
       </div>
     );

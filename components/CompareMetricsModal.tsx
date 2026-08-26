@@ -112,10 +112,10 @@ export function CompareMetricsModal({ v2Trade, v1Trade, onClose }: CompareMetric
             </div>
           </div>
 
-          {/* V1 Legacy Engine Column */}
+          {/* V1 Engine Column */}
           <div className="rounded-xl border border-amber-500/30 bg-amber-950/10 p-5 space-y-4">
             <div className="flex items-center justify-between border-b border-amber-500/20 pb-3">
-              <span className="text-sm font-bold uppercase tracking-wider text-amber-400">V1 Legacy Engine</span>
+              <span className="text-sm font-bold uppercase tracking-wider text-amber-400">V1 Engine</span>
               <span className="text-[10px] uppercase font-mono px-2 py-0.5 bg-amber-500/20 text-amber-300 rounded font-semibold">
                 v1_scripts
               </span>
@@ -176,7 +176,7 @@ export function CompareMetricsModal({ v2Trade, v1Trade, onClose }: CompareMetric
               <div className="py-12 text-center text-xs font-mono bg-zinc-950/40 rounded-xl border border-dashed border-amber-500/20 p-6">
                 <span className="text-xl block mb-2">⚠️</span>
                 <span className="font-bold text-amber-400">MISSING V1 DATA</span>
-                <p className="text-zinc-500 text-[11px] mt-1">No V1 legacy engine record exists for this timestamp.</p>
+                <p className="text-zinc-500 text-[11px] mt-1">No V1 engine record exists for this timestamp.</p>
               </div>
             )}
 

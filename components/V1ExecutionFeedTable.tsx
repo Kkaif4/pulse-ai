@@ -1,15 +1,13 @@
-import React, { useState } from "react";
+import React from "react";
 import { OldVersionTrade } from "../types";
-import { InteractiveTradingChart } from "./InteractiveTradingChart";
-import { InteractiveMaxPainChart } from "./InteractiveMaxPainChart";
 
 interface V1ExecutionFeedTableProps {
   trades: OldVersionTrade[];
+  onSelectTrade?: (timestamp: string) => void;
+  onSelectSentiment?: (trade: OldVersionTrade) => void;
 }
 
-export function V1ExecutionFeedTable({ trades }: V1ExecutionFeedTableProps) {
-  const [showCharts, setShowCharts] = useState(true);
-
+export function V1ExecutionFeedTable({ trades, onSelectTrade, onSelectSentiment }: V1ExecutionFeedTableProps) {
   const todaysTrades = trades.filter((t) => {
     const tradeDate = new Date(t.timestamp);
     const today = new Date();
@@ -22,120 +20,101 @@ export function V1ExecutionFeedTable({ trades }: V1ExecutionFeedTableProps) {
 
   const displayTrades = todaysTrades.length > 0 ? todaysTrades : trades;
 
-  // Ascending order for charts (time left-to-right)
-  const v1ChartTrades = [...displayTrades].sort(
-    (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-  );
-
   return (
-    <div className="space-y-6">
-      {/* V1 Execution Feed Table */}
-      <div className="rounded-xl border border-zinc-900 bg-zinc-900/20 p-4 md:p-6">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h3 className="text-lg font-bold tracking-tight text-amber-400 flex items-center gap-2">
-              <span>⚡ V1 Legacy Engine Execution Feed</span>
-            </h3>
-            <p className="text-xs text-zinc-500 mt-0.5">
-              Original v1 algorithm signal generation using raw sentiment weights
-            </p>
-          </div>
-          <span className="rounded bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 text-xs font-mono font-bold text-amber-400">
-            v1_scripts
-          </span>
+    <div className="rounded-xl border border-zinc-900 bg-zinc-900/20 p-4">
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <h3 className="text-base font-bold tracking-tight text-amber-400 flex items-center gap-2">
+            <span>⚡ V1 Engine</span>
+          </h3>
+          <p className="text-xs text-zinc-500 mt-0.5">Original v1 sentiment weights &amp; signal cooldown</p>
         </div>
+        <span className="rounded bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 text-xs font-mono font-bold text-amber-400">
+          v1_scripts
+        </span>
+      </div>
 
-        {/* Desktop Table View */}
-        <div className="mt-6 overflow-x-auto hidden md:block">
-          <table className="w-full border-collapse text-left text-sm text-zinc-400">
-            <thead>
-              <tr className="border-b border-zinc-900 text-xs font-semibold uppercase text-zinc-500">
-                <th className="py-3 px-4">Time</th>
-                <th className="py-3 px-4">Spot</th>
-                <th className="py-3 px-4">Signal</th>
-                <th className="py-3 px-4">Score</th>
-                <th className="py-3 px-4">PCR</th>
-                <th className="py-3 px-4">Sentiment</th>
-                <th className="py-3 px-4">Trend (Spot/EMA)</th>
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse text-left text-xs text-zinc-400">
+          <thead>
+            <tr className="border-b border-zinc-800 text-[11px] font-semibold uppercase text-zinc-500">
+              <th className="py-2 px-3">Time</th>
+              <th className="py-2 px-3">Spot</th>
+              <th className="py-2 px-3">Signal</th>
+              <th className="py-2 px-3">PCR</th>
+              <th className="py-2 px-3">Sentiment</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-zinc-900/50">
+            {displayTrades.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="py-6 text-center text-zinc-600">
+                  No V1 engine points logged yet.
+                </td>
               </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-900">
-              {displayTrades.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="py-8 text-center text-zinc-600">
-                    No V1 data points logged. Waiting for cron execution...
-                  </td>
-                </tr>
-              ) : (
-                displayTrades.map((t) => (
-                  <tr key={t.id} className="hover:bg-zinc-900/30">
-                    <td className="py-3 px-4 text-white font-mono">{new Date(t.timestamp).toLocaleTimeString()}</td>
-                    <td className="py-3 px-4 font-mono font-semibold">{Number(t.spotPrice).toFixed(2)}</td>
-                    <td className="py-3 px-4">
-                      <span
-                        className={`rounded px-2 py-0.5 text-xs font-bold ${t.signal.includes("BUY CE")
-                            ? "bg-green-500/10 text-green-400"
-                            : t.signal.includes("BUY PE")
-                              ? "bg-red-500/10 text-red-400"
-                              : "bg-zinc-800 text-zinc-400"
-                          }`}
-                      >
-                        {t.signal}
-                      </span>
+            ) : (
+              displayTrades.map((t) => {
+                const signalUpper = (t.signal || "").toUpperCase();
+                const isBuyCE = signalUpper.includes("BUY CE");
+                const isBuyPE = signalUpper.includes("BUY PE");
+
+                let signalBadge = (
+                  <span className="rounded bg-zinc-800 px-2 py-0.5 font-medium text-zinc-400">
+                    {t.signal || "Sideways"}
+                  </span>
+                );
+
+                if (isBuyCE) {
+                  signalBadge = (
+                    <span className="rounded bg-emerald-500/20 px-2 py-0.5 font-bold text-emerald-400 border border-emerald-500/30">
+                      {t.signal}
+                    </span>
+                  );
+                } else if (isBuyPE) {
+                  signalBadge = (
+                    <span className="rounded bg-rose-500/20 px-2 py-0.5 font-bold text-rose-400 border border-rose-500/30">
+                      {t.signal}
+                    </span>
+                  );
+                }
+
+                return (
+                  <tr
+                    key={t.id}
+                    onClick={() => onSelectTrade?.(t.timestamp)}
+                    className="hover:bg-zinc-800/40 transition-colors cursor-pointer"
+                  >
+                    <td className="py-2.5 px-3 font-mono text-zinc-300">
+                      {new Date(t.timestamp).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        hour12: false,
+                      })}
                     </td>
-                    <td className="py-3 px-4 font-mono text-zinc-300">{Number(t.score).toFixed(2)}</td>
-                    <td className="py-3 px-4 font-mono text-zinc-300">{Number(t.pcr).toFixed(2)}</td>
-                    <td className="py-3 px-4 font-mono text-xs text-zinc-300">{t.sentiment || "N/A"}</td>
-                    <td className="py-3 px-4 font-mono text-xs text-zinc-400">
-                      {t.spotTrend || "N/A"} / {t.emaTrend || "N/A"}
+                    <td className="py-2.5 px-3 font-mono text-white font-medium">
+                      ₹{Number(t.spotPrice).toFixed(1)}
+                    </td>
+                    <td className="py-2.5 px-3">{signalBadge}</td>
+                    <td className="py-2.5 px-3 font-mono text-zinc-300">
+                      {Number(t.pcr).toFixed(2)}
+                    </td>
+                    <td className="py-2.5 px-3">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSelectSentiment?.(t);
+                        }}
+                        className="rounded bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 px-2 py-0.5 text-xs font-semibold text-amber-300 transition-colors"
+                      >
+                        {t.sentiment || "Sideways"}
+                      </button>
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Mobile Cards View */}
-        <div className="mt-6 space-y-4 md:hidden">
-          {displayTrades.length === 0 ? (
-            <p className="py-8 text-center text-zinc-600 text-sm">
-              No V1 data points logged. Waiting for cron execution...
-            </p>
-          ) : (
-            displayTrades.map((t) => (
-              <div key={t.id} className="rounded-lg border border-zinc-900 bg-zinc-950/40 p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-white">{new Date(t.timestamp).toLocaleTimeString()}</span>
-                  <span
-                    className={`rounded px-2 py-0.5 text-[10px] font-bold ${t.signal.includes("BUY CE")
-                        ? "bg-green-500/10 text-green-400"
-                        : t.signal.includes("BUY PE")
-                          ? "bg-red-500/10 text-red-400"
-                          : "bg-zinc-800 text-zinc-400"
-                      }`}
-                  >
-                    {t.signal}
-                  </span>
-                </div>
-                <div className="grid grid-cols-3 gap-2 text-center text-xs font-mono">
-                  <div className="rounded bg-zinc-900/30 p-2 border border-zinc-900">
-                    <span className="block text-[9px] uppercase font-bold text-zinc-500">Spot</span>
-                    <span className="text-white font-semibold">{Number(t.spotPrice).toFixed(2)}</span>
-                  </div>
-                  <div className="rounded bg-zinc-900/30 p-2 border border-zinc-900">
-                    <span className="block text-[9px] uppercase font-bold text-zinc-500">Score</span>
-                    <span className="text-white">{Number(t.score).toFixed(2)}</span>
-                  </div>
-                  <div className="rounded bg-zinc-900/30 p-2 border border-zinc-900">
-                    <span className="block text-[9px] uppercase font-bold text-zinc-500">PCR</span>
-                    <span className="text-white">{Number(t.pcr).toFixed(2)}</span>
-                  </div>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
+                );
+              })
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );

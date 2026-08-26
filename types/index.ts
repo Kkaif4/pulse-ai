@@ -42,3 +42,17 @@ export interface OldVersionTrade {
   actionableSignal: string;
   summary: string;
 }
+
+export interface LegacyTrade {
+  id: number;
+  timestamp: string;
+  spotPrice: number;
+  pcr: number;
+  maxPain: number;
+  support: number;
+  resistance: number;
+  spotTrend: string;
+  sentiment: string;
+  signal: string;
+  summary: string;
+}

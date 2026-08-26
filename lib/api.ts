@@ -36,12 +36,24 @@ export const api = {
     },
   },
   trades: {
-    getAll: async (params?: { since?: number | null; date?: string; limit?: number }) => {
+    getV2All: async (params?: { since?: number | null; date?: string; limit?: number }) => {
       const { data } = await apiClient.get("/trades", { params });
       return data;
     },
     getV1All: async (params?: { since?: number | null; date?: string; limit?: number }) => {
       const { data } = await apiClient.get("/trades/v1", { params });
+      return data;
+    },
+    getLegacyAll: async (params?: { since?: number | null; date?: string; limit?: number }) => {
+      const { data } = await apiClient.get("/trades/legacy", { params });
+      return data;
+    },
+    getCompareAll: async (params?: { date?: string; limit?: number }) => {
+      const { data } = await apiClient.get("/trades/compare", { params });
+      return data;
+    },
+    getCompareDetails: async (timestamp: string) => {
+      const { data } = await apiClient.get("/trades/compare/details", { params: { timestamp } });
       return data;
     },
     getLatest: async () => {

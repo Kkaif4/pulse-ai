@@ -1,13 +1,16 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { Trade, OldVersionTrade } from "@/types";
+import { Trade, OldVersionTrade, LegacyTrade } from "@/types";
 import { AuthForm } from "@/components/AuthForm";
 import { NavigationHeader } from "@/components/NavigationHeader";
 import { LiveEngineCard } from "@/components/LiveEngineCard";
 import { KPIStatsCards } from "@/components/KPIStatsCards";
 import { ExecutionFeedTable } from "@/components/ExecutionFeedTable";
 import { V1ExecutionFeedTable } from "@/components/V1ExecutionFeedTable";
+import { LegacyExecutionFeedTable } from "@/components/LegacyExecutionFeedTable";
+import { UnifiedMultiEngineTable } from "@/components/UnifiedMultiEngineTable";
+import { TradeComparisonColumn } from "@/components/TradeComparisonColumn";
 import { HistoricalTradesTable } from "@/components/HistoricalTradesTable";
 import { TradeDetailsModal } from "@/components/TradeDetailsModal";
 import { InteractiveTradingChart } from "@/components/InteractiveTradingChart";
@@ -33,12 +36,23 @@ export default function Dashboard() {
   const [token, setToken] = useState("");
   const [authError, setAuthError] = useState("");
 
-  // Live Data & Connection State
+  // Live Data & Connection State across 3 Engines
   const [trades, setTrades] = useState<Trade[]>([]);
   const [v1Trades, setV1Trades] = useState<OldVersionTrade[]>([]);
+  const [legacyTrades, setLegacyTrades] = useState<LegacyTrade[]>([]);
   const [latestTrade, setLatestTrade] = useState<Trade | null>(null);
+
+  // Column 4 Trade Comparison Selection
+  const [selectedTimestamp, setSelectedTimestamp] = useState<string | null>(null);
+  const [selectedV2Trade, setSelectedV2Trade] = useState<Trade | null>(null);
+  const [selectedV1Trade, setSelectedV1Trade] = useState<OldVersionTrade | null>(null);
+  const [selectedLegacyTrade, setSelectedLegacyTrade] = useState<LegacyTrade | null>(null);
+
+  // Sentiment Detail Modal State
+  const [selectedSentimentTrade, setSelectedSentimentTrade] = useState<any | null>(null);
+
   const [connectionStatus, setConnectionStatus] = useState<"connecting" | "connected" | "disconnected">("disconnected");
-  const [activeTab, setActiveTab] = useState<"overview" | "charts" | "v1_engine" | "history">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "charts" | "v1_engine" | "legacy_engine" | "history">("overview");
   const [chartEngine, setChartEngine] = useState<"v2" | "v1">("v2");
   const [marketOpen, setMarketOpen] = useState(false);
   const [countdown, setCountdown] = useState(60);
@@ -56,7 +70,7 @@ export default function Dashboard() {
     const fetchHistoryByDate = async () => {
       setHistoryLoading(true);
       try {
-        const data = await api.trades.getAll({ date: historyDate });
+        const data = await api.trades.getV2All({ date: historyDate });
         setHistoryTrades(data);
       } catch (err) {
         console.error("Failed to fetch history trades for date:", err);
@@ -130,11 +144,35 @@ export default function Dashboard() {
     }
   };
 
-  // 2. Fetch History & Open WebSocket Connection
+  // Select trade for 4th Column Comparison
+  const handleSelectTradeForComparison = (timestamp: string) => {
+    setSelectedTimestamp(timestamp);
+
+    const timeDate = new Date(timestamp).getTime();
+
+    // Helper to find closest record within 2 minutes
+    const findClosest = <T extends { timestamp: string }>(list: T[]) => {
+      let closest: T | null = null;
+      let minDiff = 120000; // 2 minutes
+      for (const item of list) {
+        const diff = Math.abs(new Date(item.timestamp).getTime() - timeDate);
+        if (diff < minDiff) {
+          minDiff = diff;
+          closest = item;
+        }
+      }
+      return closest;
+    };
+
+    setSelectedV2Trade(findClosest(trades));
+    setSelectedV1Trade(findClosest(v1Trades));
+    setSelectedLegacyTrade(findClosest(legacyTrades));
+  };
+
+  // 2. Fetch History for all 3 Engines & Open WebSocket Connection
   useEffect(() => {
     if (!isAuthenticated || !token) return;
 
-    // Fetch initial history for today (or fallback to latest session trades)
     const fetchHistory = async () => {
       try {
         const d = new Date();
@@ -142,27 +180,27 @@ export default function Dashboard() {
         const ist = new Date(utc + 3600000 * 5.5);
         const todayStr = `${ist.getFullYear()}-${String(ist.getMonth() + 1).padStart(2, "0")}-${String(ist.getDate()).padStart(2, "0")}`;
 
-        let [data, v1Data] = await Promise.all([
-          api.trades.getAll({ limit: 500, date: todayStr }),
+        let [data, v1Data, legacyData] = await Promise.all([
+          api.trades.getV2All({ limit: 500, date: todayStr }),
           api.trades.getV1All({ limit: 500, date: todayStr }),
+          api.trades.getLegacyAll({ limit: 500, date: todayStr }),
         ]);
 
-        if (data.length === 0) {
-          data = await api.trades.getAll({ limit: 500 });
-        }
-        if (v1Data.length === 0) {
-          v1Data = await api.trades.getV1All({ limit: 500 });
-        }
+        if (data.length === 0) data = await api.trades.getV2All({ limit: 500 });
+        if (v1Data.length === 0) v1Data = await api.trades.getV1All({ limit: 500 });
+        if (legacyData.length === 0) legacyData = await api.trades.getLegacyAll({ limit: 500 });
 
         setTrades(data);
         setV1Trades(v1Data);
+        setLegacyTrades(legacyData);
+
         if (data.length > 0) {
           const latest = data[0];
           setLatestTrade(latest);
           lastTradeIdRef.current = latest.id;
         }
       } catch (err) {
-        console.error("Failed to fetch trade history:", err);
+        console.error("Failed to fetch multi-engine trade history:", err);
       }
     };
 
@@ -180,7 +218,7 @@ export default function Dashboard() {
     };
   }, [isAuthenticated, token]);
 
-  // WebSocket Connection & Gap Recovery Logic
+  // WebSocket Connection & Real-Time Broadcast Logic across 3 Engines
   const connectWebSocket = () => {
     if (socketRef.current && (socketRef.current.readyState === WebSocket.OPEN || socketRef.current.readyState === WebSocket.CONNECTING)) {
       return;
@@ -198,7 +236,7 @@ export default function Dashboard() {
 
     ws.onopen = async () => {
       setConnectionStatus("connected");
-      console.log("WebSocket connection established");
+      console.log("WebSocket connection established (3 Engines subscriber)");
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
         reconnectTimeoutRef.current = null;
@@ -207,13 +245,12 @@ export default function Dashboard() {
       // Backfill any trades missed during connection gap
       if (lastTradeIdRef.current) {
         try {
-          const missedTrades: Trade[] = await api.trades.getAll({ since: lastTradeIdRef.current });
+          const missedTrades: Trade[] = await api.trades.getV2All({ since: lastTradeIdRef.current });
           if (missedTrades.length > 0) {
             setTrades((prev) => {
               const combined = [...missedTrades, ...prev];
-              // Remove duplicates based on ID
               const unique = Array.from(new Map(combined.map(t => [t.id, t])).values());
-              return unique.slice(0, 500); // Keep whole day trades (newest on top)
+              return unique.slice(0, 500);
             });
             const last = missedTrades[0];
             setLatestTrade(last);
@@ -236,6 +273,9 @@ export default function Dashboard() {
         } else if (payload.type === "trade_v1:new") {
           const newV1Trade: OldVersionTrade = payload.data;
           setV1Trades((prev) => [newV1Trade, ...prev].slice(0, 500));
+        } else if (payload.type === "trade_legacy:new") {
+          const newLegacyTrade: LegacyTrade = payload.data;
+          setLegacyTrades((prev) => [newLegacyTrade, ...prev].slice(0, 500));
         } else if (payload.type === "countdown:tick") {
           setCountdown(payload.data.secondsRemaining);
         }
@@ -284,7 +324,6 @@ export default function Dashboard() {
         return;
       }
 
-      // Successful Login
       localStorage.setItem("pulse_token", data.token);
       localStorage.setItem("pulse_username", username);
       setToken(data.token);
@@ -304,7 +343,6 @@ export default function Dashboard() {
     setLatestTrade(null);
   };
 
-  // Authentication UI Overlay
   if (!isAuthenticated) {
     return (
       <AuthForm
@@ -320,7 +358,6 @@ export default function Dashboard() {
     );
   }
 
-  // Filter today's trades for the charts view (sorted ascending by time so charts render left-to-right)
   const todaysTrades = trades
     .filter((t) => {
       const tradeDate = new Date(t.timestamp);
@@ -348,10 +385,8 @@ export default function Dashboard() {
   const v2ChartTrades = todaysTrades.length > 0 ? todaysTrades : trades;
   const v1ChartTrades = v1TodaysTrades.length > 0 ? v1TodaysTrades : v1Trades;
 
-  // Dashboard Live UI
   return (
     <div className="min-h-screen bg-zinc-950 font-sans text-white selection:bg-cyan-500 selection:text-black">
-      {/* Navbar & Navigation Tabs */}
       <NavigationHeader
         connectionStatus={connectionStatus}
         marketOpen={marketOpen}
@@ -362,13 +397,10 @@ export default function Dashboard() {
         setActiveTab={setActiveTab}
       />
 
-      {/* Main container */}
-      <main className="mx-auto max-w-7xl px-4 pb-8 sm:px-6">
-        {/* Tab Contents */}
+      <main className="mx-auto max-w-[1600px] px-4 pb-8 sm:px-6">
         <div className="mt-8">
           {activeTab === "overview" && (
             <div className="space-y-8">
-              {/* Market Closed Warning Banner */}
               {!marketOpen && (
                 <div className="rounded-xl border border-red-500/25 bg-red-500/5 px-4 py-3 text-xs md:text-sm text-red-400 flex items-center gap-3">
                   <span className="relative flex h-2 w-2">
@@ -381,14 +413,88 @@ export default function Dashboard() {
                 </div>
               )}
 
-              {/* Highlighted Live Trade Conviction Card */}
               <LiveEngineCard latestTrade={latestTrade} connectionStatus={connectionStatus} />
-
-              {/* Hero KPI Grid */}
               <KPIStatsCards latestTrade={latestTrade} />
 
-              {/* Feed History Table with Signal Comparison */}
-              <ExecutionFeedTable trades={trades} v1Trades={v1Trades} />
+              {/* MULTI-ENGINE WORKSPACE GRID */}
+              <div className="space-y-3">
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <span>📊 Multi-Engine Sentiment &amp; Trade Comparison Grid</span>
+                </h3>
+
+                <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+                  {/* Left 3 Columns: Unified Multi-Engine Table (Common Time & Spot on left) */}
+                  <div className="lg:col-span-3 space-y-3">
+                    {/* Top Sentiment Summary Cards */}
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 p-3 flex items-center justify-between">
+                        <div>
+                          <span className="text-xs font-bold text-cyan-400 block">Active V2 Engine</span>
+                          <span className="text-sm font-extrabold text-white">
+                            {trades[0]?.sentiment || "Sideways"}
+                          </span>
+                        </div>
+                        <span className="text-xs font-mono font-bold text-cyan-300 bg-cyan-500/20 px-2 py-0.5 rounded">
+                          {trades[0]?.signal || "HOLD"}
+                        </span>
+                      </div>
+
+                      <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 flex items-center justify-between">
+                        <div>
+                          <span className="text-xs font-bold text-amber-400 block">V1 Engine</span>
+                          <span className="text-sm font-extrabold text-white">
+                            {v1Trades[0]?.sentiment || "Sideways"}
+                          </span>
+                        </div>
+                        <span className="text-xs font-mono font-bold text-amber-300 bg-amber-500/20 px-2 py-0.5 rounded">
+                          {v1Trades[0]?.signal || "HOLD"}
+                        </span>
+                      </div>
+
+                      <div className="rounded-xl border border-purple-500/30 bg-purple-500/10 p-3 flex items-center justify-between">
+                        <div>
+                          <span className="text-xs font-bold text-purple-400 block">Legacy Engine</span>
+                          <span className="text-sm font-extrabold text-white">
+                            {legacyTrades[0]?.sentiment || "Sideways"}
+                          </span>
+                        </div>
+                        <span className="text-xs font-mono font-bold text-purple-300 bg-purple-500/20 px-2 py-0.5 rounded">
+                          {legacyTrades[0]?.signal || "HOLD"}
+                        </span>
+                      </div>
+                    </div>
+
+                    <UnifiedMultiEngineTable
+                      v2Trades={trades}
+                      v1Trades={v1Trades}
+                      legacyTrades={legacyTrades}
+                      selectedTimestamp={selectedTimestamp}
+                      onSelectTrade={(ts) => setSelectedTimestamp(ts)}
+                      onSelectSentiment={(t) => setSelectedSentimentTrade(t)}
+                    />
+                  </div>
+
+                  {/* Right 1 Column: Multi-Engine Side-by-Side Detail Comparison */}
+                  <div className="lg:col-span-1 space-y-3">
+                    <div className="rounded-xl border border-sky-500/30 bg-sky-500/10 p-3 flex items-center justify-between">
+                      <div>
+                        <span className="text-xs font-bold text-sky-400 block">Side-by-Side Trade Comparison</span>
+                        <span className="text-xs text-zinc-300">
+                          {selectedTimestamp ? new Date(selectedTimestamp).toLocaleTimeString() : "Click row to compare"}
+                        </span>
+                      </div>
+                    </div>
+
+                    <TradeComparisonColumn
+                      selectedTimestamp={selectedTimestamp}
+                      v2Trades={trades}
+                      v1Trades={v1Trades}
+                      legacyTrades={legacyTrades}
+                      onClose={() => setSelectedTimestamp(null)}
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
@@ -396,14 +502,21 @@ export default function Dashboard() {
             <V1ExecutionFeedTable trades={v1Trades} />
           )}
 
+          {activeTab === "legacy_engine" && (
+            <LegacyExecutionFeedTable
+              trades={legacyTrades}
+              onSelectTrade={(ts) => setSelectedTimestamp(ts)}
+              onSelectSentiment={(t) => setSelectedSentimentTrade(t)}
+            />
+          )}
+
           {activeTab === "charts" && (
             <div className="space-y-6">
-              {/* Engine Switcher Controls */}
               <div className="flex items-center justify-between rounded-xl border border-zinc-900 bg-zinc-900/30 p-4">
                 <div>
                   <h3 className="text-sm font-bold text-white">Select Interactive Chart Engine Source</h3>
                   <p className="text-xs text-zinc-500 mt-0.5">
-                    Switch chart visualization between V2 Active Engine and V1 Legacy Engine data
+                    Switch chart visualization between V2 Active Engine and V1 Engine data
                   </p>
                 </div>
                 <div className="flex items-center gap-2 bg-zinc-950 p-1 rounded-lg border border-zinc-850">
@@ -411,8 +524,8 @@ export default function Dashboard() {
                     type="button"
                     onClick={() => setChartEngine("v2")}
                     className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${chartEngine === "v2"
-                        ? "bg-cyan-500 text-black shadow font-bold"
-                        : "text-zinc-400 hover:text-white"
+                      ? "bg-cyan-500 text-black shadow font-bold"
+                      : "text-zinc-400 hover:text-white"
                       }`}
                   >
                     V2 Active Engine
@@ -421,11 +534,11 @@ export default function Dashboard() {
                     type="button"
                     onClick={() => setChartEngine("v1")}
                     className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${chartEngine === "v1"
-                        ? "bg-amber-500 text-black shadow font-bold"
-                        : "text-zinc-400 hover:text-white"
+                      ? "bg-amber-500 text-black shadow font-bold"
+                      : "text-zinc-400 hover:text-white"
                       }`}
                   >
-                    V1 Legacy Engine
+                    V1 Engine
                   </button>
                 </div>
               </div>
@@ -434,7 +547,7 @@ export default function Dashboard() {
                 <div className="rounded-xl border border-zinc-900 bg-zinc-900/30 p-6">
                   <h4 className="text-md font-semibold text-zinc-400 mb-4 flex items-center justify-between">
                     <span>
-                      {chartEngine === "v2" ? "Trading Trend (Spot vs PCR)" : "V1 Legacy Trading Trend (Spot vs PCR)"}
+                      {chartEngine === "v2" ? "Trading Trend (Spot vs PCR)" : "V1 Trading Trend (Spot vs PCR)"}
                     </span>
                     <span className="text-[10px] uppercase font-bold text-zinc-600 bg-zinc-900/60 px-2 py-0.5 rounded">
                       Interactive
@@ -447,7 +560,7 @@ export default function Dashboard() {
                 <div className="rounded-xl border border-zinc-900 bg-zinc-900/30 p-6">
                   <h4 className="text-md font-semibold text-zinc-400 mb-4 flex items-center justify-between">
                     <span>
-                      {chartEngine === "v2" ? "Buyer Aggression Trend (CE vs PE)" : "V1 Legacy Buyer Aggression Trend (CE vs PE)"}
+                      {chartEngine === "v2" ? "Buyer Aggression Trend (CE vs PE)" : "V1 Buyer Aggression Trend (CE vs PE)"}
                     </span>
                     <span className="text-[10px] uppercase font-bold text-zinc-600 bg-zinc-900/60 px-2 py-0.5 rounded">
                       Interactive
@@ -460,7 +573,7 @@ export default function Dashboard() {
                 <div className="rounded-xl border border-zinc-900 bg-zinc-900/30 p-6 md:col-span-2">
                   <h4 className="text-md font-semibold text-zinc-400 mb-4 flex items-center justify-between">
                     <span>
-                      {chartEngine === "v2" ? "Max Pain vs Spot Price Level" : "V1 Legacy Max Pain vs Spot Price Level"}
+                      {chartEngine === "v2" ? "Max Pain vs Spot Price Level" : "V1 Max Pain vs Spot Price Level"}
                     </span>
                     <span className="text-[10px] uppercase font-bold text-zinc-600 bg-zinc-900/60 px-2 py-0.5 rounded">
                       Interactive
@@ -527,6 +640,37 @@ export default function Dashboard() {
           onClose={() => setSelectedHistoryTrade(null)}
           onDelete={handleDeleteTrade}
         />
+      )}
+
+      {/* Sentiment Detail Modal */}
+      {selectedSentimentTrade && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+          <div className="max-w-md w-full rounded-2xl border border-zinc-800 bg-zinc-900 p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+              <h3 className="text-base font-bold text-white">
+                Engine Sentiment Breakdown
+              </h3>
+              <button
+                onClick={() => setSelectedSentimentTrade(null)}
+                className="text-sm text-zinc-400 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="space-y-2 text-sm text-zinc-300 font-mono">
+              <div>Sentiment: <span className="font-bold text-purple-400">{selectedSentimentTrade.sentiment}</span></div>
+              <div>Signal: <span className="font-bold text-white">{selectedSentimentTrade.signal}</span></div>
+              <div>Spot Price: <span>₹{Number(selectedSentimentTrade.spotPrice).toFixed(1)}</span></div>
+              <div>PCR: <span>{Number(selectedSentimentTrade.pcr).toFixed(2)}</span></div>
+              <div>Max Pain: <span>{Number(selectedSentimentTrade.maxPain).toFixed(0)}</span></div>
+              <div>Support: <span>{Number(selectedSentimentTrade.support).toFixed(0)}</span></div>
+              <div>Resistance: <span>{Number(selectedSentimentTrade.resistance).toFixed(0)}</span></div>
+              <div className="pt-2 border-t border-zinc-800 text-xs text-zinc-400 font-sans">
+                {selectedSentimentTrade.summary || "Standard engine heuristic calculation."}
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
