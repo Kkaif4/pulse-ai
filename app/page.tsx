@@ -410,22 +410,20 @@ export default function Dashboard() {
                   <button
                     type="button"
                     onClick={() => setChartEngine("v2")}
-                    className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
-                      chartEngine === "v2"
+                    className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${chartEngine === "v2"
                         ? "bg-cyan-500 text-black shadow font-bold"
                         : "text-zinc-400 hover:text-white"
-                    }`}
+                      }`}
                   >
                     V2 Active Engine
                   </button>
                   <button
                     type="button"
                     onClick={() => setChartEngine("v1")}
-                    className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
-                      chartEngine === "v1"
+                    className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${chartEngine === "v1"
                         ? "bg-amber-500 text-black shadow font-bold"
                         : "text-zinc-400 hover:text-white"
-                    }`}
+                      }`}
                   >
                     V1 Legacy Engine
                   </button>
@@ -442,7 +440,7 @@ export default function Dashboard() {
                       Interactive
                     </span>
                   </h4>
-                  <div className="aspect-[4/3] rounded bg-zinc-950 p-4 border border-zinc-900 flex items-center justify-center">
+                  <div className="h-[380px] md:h-[420px] w-full rounded bg-zinc-950 p-4 border border-zinc-900 flex items-center justify-center">
                     <InteractiveTradingChart trades={chartEngine === "v2" ? v2ChartTrades : v1ChartTrades} />
                   </div>
                 </div>
@@ -455,7 +453,7 @@ export default function Dashboard() {
                       Interactive
                     </span>
                   </h4>
-                  <div className="aspect-[4/3] rounded bg-zinc-950 p-4 border border-zinc-900 flex items-center justify-center">
+                  <div className="h-[380px] md:h-[420px] w-full rounded bg-zinc-950 p-4 border border-zinc-900 flex items-center justify-center">
                     <InteractiveAggressionChart trades={chartEngine === "v2" ? v2ChartTrades : v1ChartTrades} />
                   </div>
                 </div>
@@ -468,7 +466,7 @@ export default function Dashboard() {
                       Interactive
                     </span>
                   </h4>
-                  <div className="w-full aspect-[16/9] rounded bg-zinc-950 p-4 border border-zinc-900 flex items-center justify-center">
+                  <div className="h-[380px] md:h-[420px] w-full rounded bg-zinc-950 p-4 border border-zinc-900 flex items-center justify-center">
                     <InteractiveMaxPainChart trades={chartEngine === "v2" ? v2ChartTrades : v1ChartTrades} />
                   </div>
                 </div>

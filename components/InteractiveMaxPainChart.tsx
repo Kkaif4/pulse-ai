@@ -5,17 +5,45 @@ export function InteractiveMaxPainChart({ trades }: { trades: (Trade | OldVersio
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 
   const [zoomRange, setZoomRange] = useState<{ start: number; end: number }>({ start: 0, end: 1 });
   const [isDragging, setIsDragging] = useState(false);
   const dragStartRef = useRef<number | null>(null);
   const zoomRangeStartOnDragRef = useRef<{ start: number; end: number } | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Sync Escape key to exit fullscreen
+  useEffect(() => {
+    if (!isFullscreen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setIsFullscreen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isFullscreen]);
+
+  // Auto-scroll to extreme right (latest data) on load, zoom change, or data updates
+  useEffect(() => {
+    const scroll = () => {
+      if (scrollContainerRef.current) {
+        scrollContainerRef.current.scrollLeft = scrollContainerRef.current.scrollWidth;
+      }
+    };
+    scroll();
+    const timer = setTimeout(scroll, 50);
+    return () => clearTimeout(timer);
+  }, [trades.length, isFullscreen]);
 
   const startIndex = Math.max(0, Math.floor(zoomRange.start * (trades.length - 1)));
   const endIndex = Math.min(trades.length - 1, Math.ceil(zoomRange.end * (trades.length - 1)));
   const visibleTrades = trades.slice(startIndex, endIndex + 1);
 
-  const chartWidth = Math.max(800, visibleTrades.length * 14);
+  // In fullscreen, we want the chart to fit exactly onto a single screen without scrollbars.
+  const chartWidth = isFullscreen ? 1200 : Math.max(800, visibleTrades.length * 14);
   const height = 300;
   const padding = { top: 20, right: 45, bottom: 35, left: 65 };
 
@@ -200,7 +228,14 @@ export function InteractiveMaxPainChart({ trades }: { trades: (Trade | OldVersio
   const isZoomed = zoomRange.start > 0 || zoomRange.end < 1;
 
   return (
-    <div className="flex flex-col h-full w-full bg-zinc-950/80 rounded-xl border border-zinc-800/80 p-4 shadow-2xl backdrop-blur-xl">
+    <div
+      ref={wrapperRef}
+      className={`flex flex-col ${
+        isFullscreen
+          ? "fixed inset-0 z-50 bg-zinc-950 p-6"
+          : "h-full w-full bg-zinc-950/80 rounded-xl border border-zinc-800/80 p-4 shadow-2xl backdrop-blur-xl"
+      }`}
+    >
       <div className="flex items-center justify-between gap-2 mb-3 text-xs">
         <div className="flex items-center gap-2">
           <span className="font-semibold text-zinc-200 tracking-wide text-sm">Max Pain vs Spot Trend</span>
@@ -209,20 +244,50 @@ export function InteractiveMaxPainChart({ trades }: { trades: (Trade | OldVersio
         {isZoomed && (
           <button
             onClick={resetZoom}
-            className="px-2.5 py-1 rounded border border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-zinc-200 transition-colors"
+            className="mr-auto px-2.5 py-1 rounded border border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-zinc-200 transition-colors"
           >
             Reset Zoom
           </button>
         )}
+        <button
+          onClick={() => setIsFullscreen(!isFullscreen)}
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded border border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-zinc-200 transition-colors font-medium"
+          title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+        >
+          {isFullscreen ? (
+            <>
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 9L4 4m0 0l5 0m-5 0l0 5m11-5l5 5m0-5l-5 0m0 0l0 5m-6 6l-5 5m0 0l0-5m0 5l5 0m11-5l-5 5m5 0l0-5m0 5l-5 0" />
+              </svg>
+              <span>Exit Fullscreen</span>
+            </>
+          ) : (
+            <>
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+              </svg>
+              <span>Full Screen</span>
+            </>
+          )}
+        </button>
       </div>
 
-      <div className="relative flex-1 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-zinc-900">
+      <div
+        ref={scrollContainerRef}
+        className={`relative flex-1 ${
+          isFullscreen
+            ? "overflow-hidden bg-zinc-950/40 p-2"
+            : "overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-zinc-900"
+        }`}
+      >
         <svg
           ref={svgRef}
-          width={chartWidth}
+          width={isFullscreen ? "100%" : chartWidth}
           height={height}
           viewBox={`0 0 ${chartWidth} ${height}`}
-          className={`h-full max-w-none select-none ${isZoomed ? (isDragging ? "cursor-grabbing" : "cursor-grab") : ""}`}
+          className={`${isFullscreen ? "w-full h-full" : "h-full max-w-none"} select-none ${
+            isZoomed ? (isDragging ? "cursor-grabbing" : "cursor-grab") : ""
+          }`}
           onMouseMove={handleMouseMove}
           onMouseLeave={handleMouseLeave}
           onMouseDown={handleMouseDown}

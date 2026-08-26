@@ -14,9 +14,10 @@ export function KPIStatsCards({ latestTrade }: KPIStatsCardsProps) {
         <div className="mt-2 flex items-baseline gap-2">
           <span className="text-3xl font-extrabold">{latestTrade ? Number(latestTrade.spotPrice).toFixed(2) : "0.00"}</span>
         </div>
-        <div className="mt-4 flex items-center justify-between text-sm">
-          <span className="text-zinc-400">PCR: {latestTrade ? latestTrade.pcr : "N/A"}</span>
-          <span className="text-zinc-400">Max Pain: {latestTrade ? latestTrade.maxPain : "N/A"}</span>
+        <div className="mt-4 grid grid-cols-3 gap-1 text-[13px] text-zinc-400 border-t border-zinc-900 pt-3">
+          <div><span className="text-zinc-500 font-semibold">PCR:</span> <span className="font-mono text-white font-bold">{latestTrade ? latestTrade.pcr : "N/A"}</span></div>
+          <div><span className="text-zinc-500 font-semibold">Pain:</span> <span className="font-mono text-white font-bold">{latestTrade ? latestTrade.maxPain : "N/A"}</span></div>
+          <div><span className="text-zinc-500 font-semibold">Score:</span> <span className="font-mono text-white font-bold">{latestTrade ? Number(latestTrade.score).toFixed(2) : "0.0"}</span></div>
         </div>
       </div>
 
@@ -26,8 +27,8 @@ export function KPIStatsCards({ latestTrade }: KPIStatsCardsProps) {
         <div className="mt-2">
           <span className="text-3xl font-extrabold text-cyan-400">{latestTrade ? latestTrade.sentiment : "Waiting"}</span>
         </div>
-        <div className="mt-4 text-xs text-zinc-500">
-          Conviction Score: {latestTrade ? Number(latestTrade.score).toFixed(2) : "0.0"}
+        <div className="mt-4 text-[13px] text-zinc-400 border-t border-zinc-900 pt-3">
+          <span className="text-zinc-500 font-semibold">Conviction Score:</span> <span className="font-mono text-white font-bold">{latestTrade ? Number(latestTrade.score).toFixed(2) : "0.0"}</span>
         </div>
       </div>
 
@@ -55,7 +56,9 @@ export function KPIStatsCards({ latestTrade }: KPIStatsCardsProps) {
             {latestTrade ? latestTrade.actionableSignal : "Warming Up"}
           </span>
         </div>
-        <div className="mt-4 text-xs text-zinc-500">Indicators: {latestTrade ? latestTrade.signal : "N/A"}</div>
+        <div className="mt-4 text-[13px] text-zinc-450 border-t border-zinc-900 pt-3 truncate" title={latestTrade ? latestTrade.signal : "N/A"}>
+          <span className="text-zinc-500 font-semibold">Indicators:</span> <span className="text-zinc-300 font-medium">{latestTrade ? latestTrade.signal : "N/A"}</span>
+        </div>
       </div>
 
       {/* Support & Resistance */}
@@ -71,8 +74,9 @@ export function KPIStatsCards({ latestTrade }: KPIStatsCardsProps) {
             <p className="text-lg font-bold text-green-400">{latestTrade ? latestTrade.support : "N/A"}</p>
           </div>
         </div>
-        <div className="mt-3 border-t border-zinc-900 pt-2 text-[10px] text-zinc-500">
-          ADX: {latestTrade ? latestTrade.adx : "N/A"} | RSI: {latestTrade ? latestTrade.rsi : "N/A"}
+        <div className="mt-3 border-t border-zinc-900 pt-3 text-[12px] text-zinc-400">
+          <span className="text-zinc-500 font-semibold">ADX:</span> <span className="font-mono text-zinc-300 font-bold mr-3">{latestTrade ? latestTrade.adx : "N/A"}</span>
+          <span className="text-zinc-500 font-semibold">RSI:</span> <span className="font-mono text-zinc-300 font-bold">{latestTrade ? latestTrade.rsi : "N/A"}</span>
         </div>
       </div>
     </div>
