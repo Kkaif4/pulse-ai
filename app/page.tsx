@@ -431,11 +431,11 @@ export default function Dashboard() {
                         <div>
                           <span className="text-xs font-bold text-cyan-400 block">Active V2 Engine</span>
                           <span className="text-sm font-extrabold text-white">
-                            {trades[0]?.sentiment || "Sideways"}
+                            {trades[0]?.sentiment || "waiting..."}
                           </span>
                         </div>
                         <span className="text-xs font-mono font-bold text-cyan-300 bg-cyan-500/20 px-2 py-0.5 rounded">
-                          {trades[0]?.signal || "HOLD"}
+                          {trades[0]?.signal || "..."}
                         </span>
                       </div>
 
@@ -443,11 +443,11 @@ export default function Dashboard() {
                         <div>
                           <span className="text-xs font-bold text-amber-400 block">V1 Engine</span>
                           <span className="text-sm font-extrabold text-white">
-                            {v1Trades[0]?.sentiment || "Sideways"}
+                            {v1Trades[0]?.sentiment || "waiting..."}
                           </span>
                         </div>
                         <span className="text-xs font-mono font-bold text-amber-300 bg-amber-500/20 px-2 py-0.5 rounded">
-                          {v1Trades[0]?.signal || "HOLD"}
+                          {v1Trades[0]?.signal || "..."}
                         </span>
                       </div>
 
@@ -455,11 +455,11 @@ export default function Dashboard() {
                         <div>
                           <span className="text-xs font-bold text-purple-400 block">Legacy Engine</span>
                           <span className="text-sm font-extrabold text-white">
-                            {legacyTrades[0]?.sentiment || "Sideways"}
+                            {legacyTrades[0]?.sentiment || "waiting..."}
                           </span>
                         </div>
                         <span className="text-xs font-mono font-bold text-purple-300 bg-purple-500/20 px-2 py-0.5 rounded">
-                          {legacyTrades[0]?.signal || "HOLD"}
+                          {legacyTrades[0]?.signal || "..."}
                         </span>
                       </div>
                     </div>
