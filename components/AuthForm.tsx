@@ -27,10 +27,11 @@ export function AuthForm({
         <div className="absolute -top-12 left-1/2 h-24 w-24 -translate-x-1/2 rounded-full bg-cyan-500/20 blur-2xl"></div>
 
         <div className="text-center">
+          <img src="/favicon-48x48.png" alt="pulseAI logo" className="mx-auto mb-3.5 w-12 h-12 rounded-xl shadow-lg border border-zinc-800" />
           <h1 className="bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-3xl font-extrabold tracking-tight text-transparent">
             pulseAI
           </h1>
-          <p className="mt-2 text-zinc-400">Advanced NIFTY Live Options Conviction Engine</p>
+          <p className="mt-2 text-zinc-400 text-sm">Advanced NIFTY Live Options Conviction Engine</p>
         </div>
 
         <form onSubmit={onSubmit} className="mt-8 space-y-6">

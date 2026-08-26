@@ -25,9 +25,12 @@ export function NavigationHeader({
       <header className="border-b border-zinc-900 bg-zinc-900/30 px-6 py-4 backdrop-blur-md">
         <div className="mx-auto flex max-w-7xl items-center justify-between">
           <div className="flex items-center gap-4">
-            <h1 className="bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-2xl font-black tracking-tight text-transparent">
-              pulseAI
-            </h1>
+            <div className="flex items-center gap-2.5">
+              <img src="/favicon-32x32.png" alt="pulseAI logo" className="w-8 h-8 rounded-lg shadow-md border border-zinc-800" />
+              <h1 className="bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-2xl font-black tracking-tight text-transparent">
+                pulseAI
+              </h1>
+            </div>
             <div className="flex items-center gap-2 rounded-full bg-zinc-900 px-3 py-1 text-xs">
               <span
                 className={`h-2.5 w-2.5 rounded-full ${
