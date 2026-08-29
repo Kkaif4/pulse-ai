@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { Trade, OldVersionTrade, LegacyTrade } from "@/types";
+import { Trade, V3VersionTrade, LegacyTrade } from "@/types";
 import { AuthForm } from "@/components/AuthForm";
 import { NavigationHeader } from "@/components/NavigationHeader";
 import { LiveEngineCard } from "@/components/LiveEngineCard";
 import { KPIStatsCards } from "@/components/KPIStatsCards";
 import { ExecutionFeedTable } from "@/components/ExecutionFeedTable";
-import { V1ExecutionFeedTable } from "@/components/V1ExecutionFeedTable";
+import { V3ExecutionFeedTable } from "@/components/V3ExecutionFeedTable";
 import { LegacyExecutionFeedTable } from "@/components/LegacyExecutionFeedTable";
 import { UnifiedMultiEngineTable } from "@/components/UnifiedMultiEngineTable";
 import { TradeComparisonColumn } from "@/components/TradeComparisonColumn";
@@ -38,22 +38,22 @@ export default function Dashboard() {
 
   // Live Data & Connection State across 3 Engines
   const [trades, setTrades] = useState<Trade[]>([]);
-  const [v1Trades, setV1Trades] = useState<OldVersionTrade[]>([]);
+  const [v3Trades, setV3Trades] = useState<V3VersionTrade[]>([]);
   const [legacyTrades, setLegacyTrades] = useState<LegacyTrade[]>([]);
-  const [latestTrade, setLatestTrade] = useState<Trade | null>(null);
+  const [latestTrade, setLatestTrade] = useState<V3VersionTrade | null>(null);
 
   // Column 4 Trade Comparison Selection
   const [selectedTimestamp, setSelectedTimestamp] = useState<string | null>(null);
   const [selectedV2Trade, setSelectedV2Trade] = useState<Trade | null>(null);
-  const [selectedV1Trade, setSelectedV1Trade] = useState<OldVersionTrade | null>(null);
+  const [selectedV3Trade, setSelectedV3Trade] = useState<V3VersionTrade | null>(null);
   const [selectedLegacyTrade, setSelectedLegacyTrade] = useState<LegacyTrade | null>(null);
 
   // Sentiment Detail Modal State
   const [selectedSentimentTrade, setSelectedSentimentTrade] = useState<any | null>(null);
 
   const [connectionStatus, setConnectionStatus] = useState<"connecting" | "connected" | "disconnected">("disconnected");
-  const [activeTab, setActiveTab] = useState<"overview" | "charts" | "v1_engine" | "legacy_engine" | "history">("overview");
-  const [chartEngine, setChartEngine] = useState<"v2" | "v1">("v2");
+  const [activeTab, setActiveTab] = useState<"overview" | "charts" | "v3_engine" | "legacy_engine" | "history">("overview");
+  const [chartEngine, setChartEngine] = useState<"v3" | "v2">("v3");
   const [marketOpen, setMarketOpen] = useState(false);
   const [countdown, setCountdown] = useState(60);
 
@@ -165,7 +165,7 @@ export default function Dashboard() {
     };
 
     setSelectedV2Trade(findClosest(trades));
-    setSelectedV1Trade(findClosest(v1Trades));
+    setSelectedV3Trade(findClosest(v3Trades));
     setSelectedLegacyTrade(findClosest(legacyTrades));
   };
 
@@ -180,24 +180,27 @@ export default function Dashboard() {
         const ist = new Date(utc + 3600000 * 5.5);
         const todayStr = `${ist.getFullYear()}-${String(ist.getMonth() + 1).padStart(2, "0")}-${String(ist.getDate()).padStart(2, "0")}`;
 
-        let [data, v1Data, legacyData] = await Promise.all([
+        let [data, v3Data, legacyData] = await Promise.all([
           api.trades.getV2All({ limit: 500, date: todayStr }),
-          api.trades.getV1All({ limit: 500, date: todayStr }),
+          api.trades.getV3All({ limit: 500, date: todayStr }),
           api.trades.getLegacyAll({ limit: 500, date: todayStr }),
         ]);
 
         if (data.length === 0) data = await api.trades.getV2All({ limit: 500 });
-        if (v1Data.length === 0) v1Data = await api.trades.getV1All({ limit: 500 });
+        if (v3Data.length === 0) v3Data = await api.trades.getV3All({ limit: 500 });
         if (legacyData.length === 0) legacyData = await api.trades.getLegacyAll({ limit: 500 });
 
         setTrades(data);
-        setV1Trades(v1Data);
+        setV3Trades(v3Data);
         setLegacyTrades(legacyData);
 
-        if (data.length > 0) {
-          const latest = data[0];
+        if (v3Data.length > 0) {
+          const latest = v3Data[0];
           setLatestTrade(latest);
           lastTradeIdRef.current = latest.id;
+        } else if (data.length > 0) {
+          // Fallback if V3 history is completely empty
+          lastTradeIdRef.current = data[0].id;
         }
       } catch (err) {
         console.error("Failed to fetch multi-engine trade history:", err);
@@ -245,9 +248,9 @@ export default function Dashboard() {
       // Backfill any trades missed during connection gap
       if (lastTradeIdRef.current) {
         try {
-          const missedTrades: Trade[] = await api.trades.getV2All({ since: lastTradeIdRef.current });
+          const missedTrades: V3VersionTrade[] = await api.trades.getV3All({ since: lastTradeIdRef.current });
           if (missedTrades.length > 0) {
-            setTrades((prev) => {
+            setV3Trades((prev) => {
               const combined = [...missedTrades, ...prev];
               const unique = Array.from(new Map(combined.map(t => [t.id, t])).values());
               return unique.slice(0, 500);
@@ -267,12 +270,12 @@ export default function Dashboard() {
         const payload = JSON.parse(event.data);
         if (payload.type === "trade:new") {
           const newTrade: Trade = payload.data;
-          setLatestTrade(newTrade);
-          lastTradeIdRef.current = newTrade.id;
           setTrades((prev) => [newTrade, ...prev].slice(0, 500));
-        } else if (payload.type === "trade_v1:new") {
-          const newV1Trade: OldVersionTrade = payload.data;
-          setV1Trades((prev) => [newV1Trade, ...prev].slice(0, 500));
+        } else if (payload.type === "trade_v3:new") {
+          const newV3Trade: V3VersionTrade = payload.data;
+          setLatestTrade(newV3Trade);
+          lastTradeIdRef.current = newV3Trade.id;
+          setV3Trades((prev) => [newV3Trade, ...prev].slice(0, 500));
         } else if (payload.type === "trade_legacy:new") {
           const newLegacyTrade: LegacyTrade = payload.data;
           setLegacyTrades((prev) => [newLegacyTrade, ...prev].slice(0, 500));
@@ -370,7 +373,7 @@ export default function Dashboard() {
     })
     .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
-  const v1TodaysTrades = v1Trades
+  const v3TodaysTrades = v3Trades
     .filter((t) => {
       const tradeDate = new Date(t.timestamp);
       const today = new Date();
@@ -383,7 +386,7 @@ export default function Dashboard() {
     .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
   const v2ChartTrades = todaysTrades.length > 0 ? todaysTrades : trades;
-  const v1ChartTrades = v1TodaysTrades.length > 0 ? v1TodaysTrades : v1Trades;
+  const v3ChartTrades = v3TodaysTrades.length > 0 ? v3TodaysTrades : v3Trades;
 
   return (
     <div className="min-h-screen bg-zinc-950 font-sans text-white selection:bg-cyan-500 selection:text-black">
@@ -427,6 +430,18 @@ export default function Dashboard() {
                   <div className="lg:col-span-3 space-y-3">
                     {/* Top Sentiment Summary Cards */}
                     <div className="grid grid-cols-3 gap-3">
+                      <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 flex items-center justify-between">
+                        <div>
+                          <span className="text-xs font-bold text-emerald-400 block">V3 Engine (Primary)</span>
+                          <span className="text-sm font-extrabold text-white">
+                            {v3Trades[0]?.sentiment || "waiting..."}
+                          </span>
+                        </div>
+                        <span className="text-xs font-mono font-bold text-emerald-300 bg-emerald-500/20 px-2 py-0.5 rounded">
+                          {v3Trades[0]?.signal || "..."}
+                        </span>
+                      </div>
+
                       <div className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 p-3 flex items-center justify-between">
                         <div>
                           <span className="text-xs font-bold text-cyan-400 block">Active V2 Engine</span>
@@ -436,18 +451,6 @@ export default function Dashboard() {
                         </div>
                         <span className="text-xs font-mono font-bold text-cyan-300 bg-cyan-500/20 px-2 py-0.5 rounded">
                           {trades[0]?.signal || "..."}
-                        </span>
-                      </div>
-
-                      <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 flex items-center justify-between">
-                        <div>
-                          <span className="text-xs font-bold text-amber-400 block">V1 Engine</span>
-                          <span className="text-sm font-extrabold text-white">
-                            {v1Trades[0]?.sentiment || "waiting..."}
-                          </span>
-                        </div>
-                        <span className="text-xs font-mono font-bold text-amber-300 bg-amber-500/20 px-2 py-0.5 rounded">
-                          {v1Trades[0]?.signal || "..."}
                         </span>
                       </div>
 
@@ -466,7 +469,7 @@ export default function Dashboard() {
 
                     <UnifiedMultiEngineTable
                       v2Trades={trades}
-                      v1Trades={v1Trades}
+                      v3Trades={v3Trades}
                       legacyTrades={legacyTrades}
                       selectedTimestamp={selectedTimestamp}
                       onSelectTrade={(ts) => setSelectedTimestamp(ts)}
@@ -488,7 +491,7 @@ export default function Dashboard() {
                     <TradeComparisonColumn
                       selectedTimestamp={selectedTimestamp}
                       v2Trades={trades}
-                      v1Trades={v1Trades}
+                      v3Trades={v3Trades}
                       legacyTrades={legacyTrades}
                       onClose={() => setSelectedTimestamp(null)}
                     />
@@ -498,8 +501,8 @@ export default function Dashboard() {
             </div>
           )}
 
-          {activeTab === "v1_engine" && (
-            <V1ExecutionFeedTable trades={v1Trades} />
+          {activeTab === "v3_engine" && (
+            <V3ExecutionFeedTable trades={v3Trades} />
           )}
 
           {activeTab === "legacy_engine" && (
@@ -516,10 +519,20 @@ export default function Dashboard() {
                 <div>
                   <h3 className="text-sm font-bold text-white">Select Interactive Chart Engine Source</h3>
                   <p className="text-xs text-zinc-500 mt-0.5">
-                    Switch chart visualization between V2 Active Engine and V1 Engine data
+                    Switch chart visualization between V3 Engine and Active V2 Engine data
                   </p>
                 </div>
                 <div className="flex items-center gap-2 bg-zinc-950 p-1 rounded-lg border border-zinc-850">
+                  <button
+                    type="button"
+                    onClick={() => setChartEngine("v3")}
+                    className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${chartEngine === "v3"
+                      ? "bg-emerald-500 text-black shadow font-bold"
+                      : "text-zinc-400 hover:text-white"
+                      }`}
+                  >
+                    V3 Engine (Primary)
+                  </button>
                   <button
                     type="button"
                     onClick={() => setChartEngine("v2")}
@@ -530,16 +543,6 @@ export default function Dashboard() {
                   >
                     V2 Active Engine
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setChartEngine("v1")}
-                    className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${chartEngine === "v1"
-                      ? "bg-amber-500 text-black shadow font-bold"
-                      : "text-zinc-400 hover:text-white"
-                      }`}
-                  >
-                    V1 Engine
-                  </button>
                 </div>
               </div>
 
@@ -547,40 +550,40 @@ export default function Dashboard() {
                 <div className="rounded-xl border border-zinc-900 bg-zinc-900/30 p-6">
                   <h4 className="text-md font-semibold text-zinc-400 mb-4 flex items-center justify-between">
                     <span>
-                      {chartEngine === "v2" ? "Trading Trend (Spot vs PCR)" : "V1 Trading Trend (Spot vs PCR)"}
+                      {chartEngine === "v3" ? "Trading Trend (Spot vs PCR)" : "V2 Trading Trend (Spot vs PCR)"}
                     </span>
                     <span className="text-[10px] uppercase font-bold text-zinc-600 bg-zinc-900/60 px-2 py-0.5 rounded">
                       Interactive
                     </span>
                   </h4>
                   <div className="h-[380px] md:h-[420px] w-full rounded bg-zinc-950 p-4 border border-zinc-900 flex items-center justify-center">
-                    <InteractiveTradingChart trades={chartEngine === "v2" ? v2ChartTrades : v1ChartTrades} />
+                    <InteractiveTradingChart trades={chartEngine === "v3" ? v3ChartTrades : v2ChartTrades} />
                   </div>
                 </div>
                 <div className="rounded-xl border border-zinc-900 bg-zinc-900/30 p-6">
                   <h4 className="text-md font-semibold text-zinc-400 mb-4 flex items-center justify-between">
                     <span>
-                      {chartEngine === "v2" ? "Buyer Aggression Trend (CE vs PE)" : "V1 Buyer Aggression Trend (CE vs PE)"}
+                      {chartEngine === "v3" ? "Buyer Aggression Trend (CE vs PE)" : "V2 Buyer Aggression Trend (CE vs PE)"}
                     </span>
                     <span className="text-[10px] uppercase font-bold text-zinc-600 bg-zinc-900/60 px-2 py-0.5 rounded">
                       Interactive
                     </span>
                   </h4>
                   <div className="h-[380px] md:h-[420px] w-full rounded bg-zinc-950 p-4 border border-zinc-900 flex items-center justify-center">
-                    <InteractiveAggressionChart trades={chartEngine === "v2" ? v2ChartTrades : v1ChartTrades} />
+                    <InteractiveAggressionChart trades={chartEngine === "v3" ? v3ChartTrades : v2ChartTrades} />
                   </div>
                 </div>
                 <div className="rounded-xl border border-zinc-900 bg-zinc-900/30 p-6 md:col-span-2">
                   <h4 className="text-md font-semibold text-zinc-400 mb-4 flex items-center justify-between">
                     <span>
-                      {chartEngine === "v2" ? "Max Pain vs Spot Price Level" : "V1 Max Pain vs Spot Price Level"}
+                      {chartEngine === "v3" ? "Max Pain vs Spot Price Level" : "V2 Max Pain vs Spot Price Level"}
                     </span>
                     <span className="text-[10px] uppercase font-bold text-zinc-600 bg-zinc-900/60 px-2 py-0.5 rounded">
                       Interactive
                     </span>
                   </h4>
                   <div className="h-[380px] md:h-[420px] w-full rounded bg-zinc-950 p-4 border border-zinc-900 flex items-center justify-center">
-                    <InteractiveMaxPainChart trades={chartEngine === "v2" ? v2ChartTrades : v1ChartTrades} />
+                    <InteractiveMaxPainChart trades={chartEngine === "v3" ? v3ChartTrades : v2ChartTrades} />
                   </div>
                 </div>
               </div>

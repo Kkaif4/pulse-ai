@@ -1,26 +1,26 @@
 import React, { useEffect, useState } from "react";
-import { Trade, OldVersionTrade, LegacyTrade } from "../types";
+import { Trade, V3VersionTrade, LegacyTrade } from "../types";
 import { api } from "../lib/api";
 
 interface TradeComparisonColumnProps {
   selectedTimestamp: string | null;
+  v3Trades?: V3VersionTrade[];
   v2Trades?: Trade[];
-  v1Trades?: OldVersionTrade[];
   legacyTrades?: LegacyTrade[];
   onClose?: () => void;
 }
 
 export function TradeComparisonColumn({
   selectedTimestamp,
+  v3Trades = [],
   v2Trades = [],
-  v1Trades = [],
   legacyTrades = [],
   onClose,
 }: TradeComparisonColumnProps) {
   const [loading, setLoading] = useState(false);
   const [apiDetails, setApiDetails] = useState<{
+    v3: V3VersionTrade | null;
     v2: Trade | null;
-    v1: OldVersionTrade | null;
     legacy: LegacyTrade | null;
   } | null>(null);
 
@@ -76,12 +76,12 @@ export function TradeComparisonColumn({
     return best;
   };
 
+  const v3 = apiDetails?.v3 ?? findLocalClosest(v3Trades, selectedTimestamp);
   const v2 = apiDetails?.v2 ?? findLocalClosest(v2Trades, selectedTimestamp);
-  const v1 = apiDetails?.v1 ?? findLocalClosest(v1Trades, selectedTimestamp);
   const legacy = apiDetails?.legacy ?? findLocalClosest(legacyTrades, selectedTimestamp);
 
-  const availableEngineCount = [v2, v1, legacy].filter(Boolean).length;
-  const spotPrice = v2?.spotPrice ?? v1?.spotPrice ?? legacy?.spotPrice ?? 0;
+  const availableEngineCount = [v3, v2, legacy].filter(Boolean).length;
+  const spotPrice = v3?.spotPrice ?? v2?.spotPrice ?? legacy?.spotPrice ?? 0;
   const displayTime = new Date(selectedTimestamp).toLocaleTimeString([], {
     hour: "2-digit",
     minute: "2-digit",
@@ -137,6 +137,36 @@ export function TradeComparisonColumn({
       ) : (
         /* Side-by-side Engine Cards */
         <div className="space-y-3">
+          {/* V3 Engine Card (Primary) */}
+          <div className={`rounded-lg border p-3 ${v3 ? "border-emerald-500/20 bg-emerald-500/5" : "border-zinc-800 bg-zinc-950/30 opacity-60"}`}>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-bold text-emerald-400">V3 Engine (Primary)</span>
+              {v3 ? (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300">
+                  {v3.signal || "Sideways"}
+                </span>
+              ) : (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-zinc-800 text-zinc-500">
+                  N/A / Missing Data
+                </span>
+              )}
+            </div>
+            {v3 ? (
+              <div className="grid grid-cols-2 gap-2 text-xs font-mono text-zinc-300">
+                <div>Sentiment: <span className="text-white font-semibold">{v3.sentiment}</span></div>
+                <div>Score: <span className="text-emerald-300 font-bold">{v3.score ? Number(v3.score).toFixed(2) : "0"}</span></div>
+                <div>VIX: <span>{v3.indiaVix ? Number(v3.indiaVix).toFixed(2) : "N/A"}</span></div>
+                <div>PCR: <span>{v3.pcr ? Number(v3.pcr).toFixed(2) : "N/A"}</span></div>
+                <div>RSI: <span>{v3.rsi ? Number(v3.rsi).toFixed(1) : "N/A"}</span></div>
+                <div>ADX: <span>{v3.adx ? Number(v3.adx).toFixed(1) : "N/A"}</span></div>
+                <div>CE Δ / PE Δ: <span className="text-purple-300">{v3.ceDelta !== undefined && v3.peDelta !== undefined ? `${v3.ceDelta.toFixed(2)} / ${v3.peDelta.toFixed(2)}` : "N/A"}</span></div>
+                <div>Imbalance: <span>{v3.depthImbalance !== undefined ? `${(v3.depthImbalance * 100).toFixed(1)}%` : "N/A"}</span></div>
+              </div>
+            ) : (
+              <p className="text-xs text-zinc-500 italic">No V3 analysis record at this tick</p>
+            )}
+          </div>
+
           {/* Active V2 Card */}
           <div className={`rounded-lg border p-3 ${v2 ? "border-cyan-500/20 bg-cyan-500/5" : "border-zinc-800 bg-zinc-950/30 opacity-60"}`}>
             <div className="flex items-center justify-between mb-2">
@@ -164,34 +194,6 @@ export function TradeComparisonColumn({
               </div>
             ) : (
               <p className="text-xs text-zinc-500 italic">No V2 analysis record at this tick</p>
-            )}
-          </div>
-
-          {/* V1 Card */}
-          <div className={`rounded-lg border p-3 ${v1 ? "border-amber-500/20 bg-amber-500/5" : "border-zinc-800 bg-zinc-950/30 opacity-60"}`}>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-bold text-amber-400">V1 Engine</span>
-              {v1 ? (
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300">
-                  {v1.signal || "Sideways"}
-                </span>
-              ) : (
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-zinc-800 text-zinc-500">
-                  N/A / Missing Data
-                </span>
-              )}
-            </div>
-            {v1 ? (
-              <div className="grid grid-cols-2 gap-2 text-xs font-mono text-zinc-300">
-                <div>Sentiment: <span className="text-white font-semibold">{v1.sentiment}</span></div>
-                <div>Score: <span className="text-amber-300 font-bold">{v1.score ? Number(v1.score).toFixed(0) : "0"}</span></div>
-                <div>PCR: <span>{v1.pcr ? Number(v1.pcr).toFixed(2) : "N/A"}</span></div>
-                <div>Max Pain: <span>{v1.maxPain ? Number(v1.maxPain).toFixed(0) : "N/A"}</span></div>
-                <div>Support: <span>{v1.support ? Number(v1.support).toFixed(0) : "N/A"}</span></div>
-                <div>Resistance: <span>{v1.resistance ? Number(v1.resistance).toFixed(0) : "N/A"}</span></div>
-              </div>
-            ) : (
-              <p className="text-xs text-zinc-500 italic">No V1 analysis record at this tick</p>
             )}
           </div>
 

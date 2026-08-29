@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
-import { Trade, OldVersionTrade } from "../types";
+import { Trade, V3VersionTrade } from "../types";
 
-export function InteractiveMaxPainChart({ trades }: { trades: (Trade | OldVersionTrade)[] }) {
+export function InteractiveMaxPainChart({ trades }: { trades: (Trade | V3VersionTrade)[] }) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);

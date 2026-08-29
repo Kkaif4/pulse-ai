@@ -1,8 +1,8 @@
 import React from "react";
-import { Trade } from "../types";
+import { Trade, V3VersionTrade } from "../types";
 
 interface KPIStatsCardsProps {
-  latestTrade: Trade | null;
+  latestTrade: Trade | V3VersionTrade | null;
 }
 
 export function KPIStatsCards({ latestTrade }: KPIStatsCardsProps) {

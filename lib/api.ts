@@ -40,8 +40,8 @@ export const api = {
       const { data } = await apiClient.get("/trades", { params });
       return data;
     },
-    getV1All: async (params?: { since?: number | null; date?: string; limit?: number }) => {
-      const { data } = await apiClient.get("/trades/v1", { params });
+    getV3All: async (params?: { since?: number | null; date?: string; limit?: number }) => {
+      const { data } = await apiClient.get("/trades/v3", { params });
       return data;
     },
     getLegacyAll: async (params?: { since?: number | null; date?: string; limit?: number }) => {

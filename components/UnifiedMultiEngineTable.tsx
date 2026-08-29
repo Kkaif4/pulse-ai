@@ -1,17 +1,17 @@
 import React from "react";
-import { Trade, OldVersionTrade, LegacyTrade } from "../types";
+import { Trade, V3VersionTrade, LegacyTrade } from "../types";
 
 export interface SyncedTick {
   timestamp: string;
   spotPrice: number;
+  v3: V3VersionTrade | null;
   v2: Trade | null;
-  v1: OldVersionTrade | null;
   legacy: LegacyTrade | null;
 }
 
 interface UnifiedMultiEngineTableProps {
+  v3Trades: V3VersionTrade[];
   v2Trades: Trade[];
-  v1Trades: OldVersionTrade[];
   legacyTrades: LegacyTrade[];
   selectedTimestamp: string | null;
   onSelectTrade: (timestamp: string) => void;
@@ -19,8 +19,8 @@ interface UnifiedMultiEngineTableProps {
 }
 
 export function UnifiedMultiEngineTable({
+  v3Trades,
   v2Trades,
-  v1Trades,
   legacyTrades,
   selectedTimestamp,
   onSelectTrade,
@@ -39,22 +39,22 @@ export function UnifiedMultiEngineTable({
       timeMap.set(minuteKey, {
         timestamp: tsStr,
         spotPrice: spot,
+        v3: null,
         v2: null,
-        v1: null,
         legacy: null,
       });
     }
     return timeMap.get(minuteKey)!;
   };
 
+  v3Trades.forEach((t) => {
+    const tick = getOrInitTick(t.timestamp, Number(t.spotPrice));
+    if (!tick.v3) tick.v3 = t;
+  });
+
   v2Trades.forEach((t) => {
     const tick = getOrInitTick(t.timestamp, Number(t.spotPrice));
     if (!tick.v2) tick.v2 = t;
-  });
-
-  v1Trades.forEach((t) => {
-    const tick = getOrInitTick(t.timestamp, Number(t.spotPrice));
-    if (!tick.v1) tick.v1 = t;
   });
 
   legacyTrades.forEach((t) => {
@@ -126,11 +126,11 @@ export function UnifiedMultiEngineTable({
               <th colSpan={2} className="py-2 px-3 border-r border-zinc-800 text-zinc-300">
                 Common Market Data
               </th>
+              <th colSpan={3} className="py-2 px-3 border-r border-zinc-800 text-emerald-400">
+                V3 Engine (Primary)
+              </th>
               <th colSpan={3} className="py-2 px-3 border-r border-zinc-800 text-cyan-400">
                 Active V2 Engine
-              </th>
-              <th colSpan={3} className="py-2 px-3 border-r border-zinc-800 text-amber-400">
-                V1 Engine
               </th>
               <th colSpan={3} className="py-2 px-3 text-purple-400">
                 Legacy Engine
@@ -143,12 +143,12 @@ export function UnifiedMultiEngineTable({
               <th className="py-2 px-3">Time</th>
               <th className="py-2 px-3 border-r border-zinc-800">Spot Price</th>
 
-              {/* V2 Engine */}
+              {/* V3 Engine */}
               <th className="py-2 px-3">Signal</th>
-              <th className="py-2 px-3">PCR</th>
+              <th className="py-2 px-3">Score</th>
               <th className="py-2 px-3 border-r border-zinc-800">Sentiment</th>
 
-              {/* V1 Engine */}
+              {/* V2 Engine */}
               <th className="py-2 px-3">Signal</th>
               <th className="py-2 px-3">PCR</th>
               <th className="py-2 px-3 border-r border-zinc-800">Sentiment</th>
@@ -190,6 +190,27 @@ export function UnifiedMultiEngineTable({
                       ₹{tick.spotPrice ? tick.spotPrice.toFixed(1) : "N/A"}
                     </td>
 
+                    {/* V3 Engine Columns */}
+                    <td className="py-2.5 px-3">{renderSignalBadge(tick.v3?.signal)}</td>
+                    <td className="py-2.5 px-3 font-mono text-zinc-300">
+                      {tick.v3?.score ? Number(tick.v3.score).toFixed(2) : "-"}
+                    </td>
+                    <td className="py-2.5 px-3 border-r border-zinc-900">
+                      {tick.v3?.sentiment ? (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onSelectSentiment?.(tick.v3);
+                          }}
+                          className="rounded bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-300 transition-colors"
+                        >
+                          {tick.v3.sentiment}
+                        </button>
+                      ) : (
+                        <span className="text-zinc-600 font-mono text-[11px]">-</span>
+                      )}
+                    </td>
+
                     {/* V2 Engine Columns */}
                     <td className="py-2.5 px-3">{renderSignalBadge(tick.v2?.signal)}</td>
                     <td className="py-2.5 px-3 font-mono text-zinc-300">
@@ -205,27 +226,6 @@ export function UnifiedMultiEngineTable({
                           className="rounded bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 px-1.5 py-0.5 text-[11px] font-semibold text-cyan-300 transition-colors"
                         >
                           {tick.v2.sentiment}
-                        </button>
-                      ) : (
-                        <span className="text-zinc-600 font-mono text-[11px]">-</span>
-                      )}
-                    </td>
-
-                    {/* V1 Engine Columns */}
-                    <td className="py-2.5 px-3">{renderSignalBadge(tick.v1?.signal)}</td>
-                    <td className="py-2.5 px-3 font-mono text-zinc-300">
-                      {tick.v1?.pcr ? Number(tick.v1.pcr).toFixed(2) : "-"}
-                    </td>
-                    <td className="py-2.5 px-3 border-r border-zinc-900">
-                      {tick.v1?.sentiment ? (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onSelectSentiment?.(tick.v1);
-                          }}
-                          className="rounded bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 px-1.5 py-0.5 text-[11px] font-semibold text-amber-300 transition-colors"
-                        >
-                          {tick.v1.sentiment}
                         </button>
                       ) : (
                         <span className="text-zinc-600 font-mono text-[11px]">-</span>

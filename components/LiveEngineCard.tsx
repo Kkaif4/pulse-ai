@@ -1,9 +1,9 @@
 import React from "react";
-import { Trade } from "../types";
+import { Trade, V3VersionTrade } from "../types";
 import { parseSummary } from "./parseSummary";
 
 interface LiveEngineCardProps {
-  latestTrade: Trade | null;
+  latestTrade: Trade | V3VersionTrade | null;
   connectionStatus: string;
 }
 

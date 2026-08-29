@@ -26,16 +26,24 @@ export interface Trade {
   summary: string;
 }
 
-export interface OldVersionTrade {
+export interface V3VersionTrade {
   id: number;
   timestamp: string;
   spotPrice: number;
+  indiaVix?: number;
   pcr: number;
   maxPain: number;
   support: number;
   resistance: number;
+  ceDelta?: number;
+  peDelta?: number;
+  ceSpread?: number;
+  peSpread?: number;
+  depthImbalance?: number;
+  foScore: number;
+  rsi: number;
+  adx: number;
   spotTrend: string;
-  emaTrend: string;
   score: number;
   sentiment: string;
   signal: string;
