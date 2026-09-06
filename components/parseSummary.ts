@@ -1,3 +1,16 @@
+/**
+ * Escapes HTML characters in strings to prevent XSS attacks when rendering dynamic content.
+ */
+export function escapeHtml(str: string): string {
+  if (!str) return "";
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 export function parseSummary(summaryText: string): Array<{ key: string; value: string }> {
   if (!summaryText) return [];
   const cleanText = summaryText.replace(/\u001b\[[0-9;]*m/g, "");
@@ -9,10 +22,15 @@ export function parseSummary(summaryText: string): Array<{ key: string; value: s
     segments.forEach((seg) => {
       const parts = seg.split(":");
       if (parts.length >= 2) {
-        const key = parts[0]
-          .replace(/[\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF]/g, "")
-          .trim();
-        const value = parts.slice(1).join(":").trim();
+        const key = escapeHtml(
+          parts[0]
+            .replace(
+              /[\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF]/g,
+              ""
+            )
+            .trim()
+        );
+        const value = escapeHtml(parts.slice(1).join(":").trim());
         if (key && value) {
           items.push({ key, value });
         }

@@ -4,12 +4,13 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
 export const apiClient = axios.create({
   baseURL: API_URL,
+  withCredentials: true, // Enables sending secure HttpOnly session cookies automatically
   headers: {
     "Content-Type": "application/json",
   },
 });
 
-// Automatically inject JWT token from localStorage into request headers
+// Automatically inject JWT token from localStorage into request headers as fallback
 apiClient.interceptors.request.use(
   (config) => {
     const token = typeof window !== "undefined" ? localStorage.getItem("pulse_token") : null;
@@ -26,12 +27,16 @@ apiClient.interceptors.request.use(
 // Centralized API endpoints
 export const api = {
   auth: {
-    login: async (username: string, password: string) => {
-      const { data } = await apiClient.post("/auth/login", { username, password });
+    login: async (username: string, password: string, hp_website: string = "") => {
+      const { data } = await apiClient.post("/auth/login", { username, password, hp_website });
       return data;
     },
-    register: async (username: string, password: string) => {
-      const { data } = await apiClient.post("/auth/register", { username, password });
+    register: async (username: string, password: string, hp_website: string = "") => {
+      const { data } = await apiClient.post("/auth/register", { username, password, hp_website });
+      return data;
+    },
+    logout: async () => {
+      const { data } = await apiClient.post("/auth/logout");
       return data;
     },
   },

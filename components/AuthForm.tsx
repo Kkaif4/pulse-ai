@@ -54,6 +54,15 @@ export function AuthForm({
             />
           </div>
 
+          {/* Hidden Honeypot Field for Bot Protection */}
+          <input
+            type="text"
+            name="hp_website"
+            tabIndex={-1}
+            autoComplete="off"
+            style={{ display: "none", position: "absolute", left: "-9999px" }}
+          />
+
           <div className="space-y-2">
             <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Password</label>
             <input
