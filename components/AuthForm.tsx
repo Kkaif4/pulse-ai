@@ -1,9 +1,12 @@
+"use client";
+
 import React from "react";
+import Image from "next/image";
 
 interface AuthFormProps {
   authMode: "login" | "register";
   username: string;
-  passwordHash: string; // password input string value
+  passwordHash: string;
   authError: string;
   onChangeUsername: (val: string) => void;
   onChangePassword: (val: string) => void;
@@ -27,7 +30,14 @@ export function AuthForm({
         <div className="absolute -top-12 left-1/2 h-24 w-24 -translate-x-1/2 rounded-full bg-cyan-500/20 blur-2xl"></div>
 
         <div className="text-center">
-          <img src="/favicon-48x48.png" alt="pulseAI logo" className="mx-auto mb-3.5 w-12 h-12 rounded-xl shadow-lg border border-zinc-800" />
+          <Image
+            src="/favicon-48x48.png"
+            alt="pulseAI logo"
+            width={48}
+            height={48}
+            className="mx-auto mb-3.5 rounded-xl shadow-lg border border-zinc-800"
+            priority
+          />
           <h1 className="bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-3xl font-extrabold tracking-tight text-transparent">
             pulseAI
           </h1>
@@ -36,7 +46,7 @@ export function AuthForm({
 
         <form onSubmit={onSubmit} className="mt-8 space-y-6">
           {authError && (
-            <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-center text-sm text-red-400">
+            <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-center text-sm text-rose-400">
               {authError}
             </div>
           )}

@@ -1,16 +1,21 @@
+"use client";
+
 import React from "react";
 import { Trade, V3VersionTrade } from "../types";
+import { getSignalTheme } from "../lib/trade-utils";
 
 interface KPIStatsCardsProps {
   latestTrade: Trade | V3VersionTrade | null;
 }
 
 export function KPIStatsCards({ latestTrade }: KPIStatsCardsProps) {
+  const theme = getSignalTheme(latestTrade?.signal);
+
   return (
     <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
       {/* Spot Price & PCR */}
       <div className="rounded-xl border border-zinc-900 bg-zinc-900/40 p-6 backdrop-blur-xl">
-        <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Spot & PCR</span>
+        <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Spot &amp; PCR</span>
         <div className="mt-2 flex items-baseline gap-2">
           <span className="text-3xl font-extrabold">{latestTrade ? Number(latestTrade.spotPrice).toFixed(2) : "0.00"}</span>
         </div>
@@ -33,30 +38,14 @@ export function KPIStatsCards({ latestTrade }: KPIStatsCardsProps) {
       </div>
 
       {/* Actionable Signal */}
-      <div
-        className={`rounded-xl border p-6 backdrop-blur-xl ${
-          latestTrade?.signal.includes("BUY CE")
-            ? "border-green-500/30 bg-green-500/5"
-            : latestTrade?.signal.includes("BUY PE")
-            ? "border-red-500/30 bg-red-500/5"
-            : "border-zinc-900 bg-zinc-900/40"
-        }`}
-      >
+      <div className={`rounded-xl border p-6 backdrop-blur-xl transition-all duration-300 ${theme.border} ${theme.bg}`}>
         <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Live Trade Action</span>
         <div className="mt-2">
-          <span
-            className={`text-3xl font-black ${
-              latestTrade?.signal.includes("BUY CE")
-                ? "text-green-400"
-                : latestTrade?.signal.includes("BUY PE")
-                ? "text-red-400"
-                : "text-zinc-400"
-            }`}
-          >
+          <span className={`text-3xl font-black ${theme.text}`}>
             {latestTrade ? latestTrade.actionableSignal : "Warming Up"}
           </span>
         </div>
-        <div className="mt-4 text-[13px] text-zinc-450 border-t border-zinc-900 pt-3 truncate" title={latestTrade ? latestTrade.signal : "N/A"}>
+        <div className="mt-4 text-[13px] text-zinc-400 border-t border-zinc-900 pt-3 truncate" title={latestTrade ? latestTrade.signal : "N/A"}>
           <span className="text-zinc-500 font-semibold">Indicators:</span> <span className="text-zinc-300 font-medium">{latestTrade ? latestTrade.signal : "N/A"}</span>
         </div>
       </div>
@@ -67,11 +56,11 @@ export function KPIStatsCards({ latestTrade }: KPIStatsCardsProps) {
         <div className="mt-2 flex justify-between">
           <div>
             <span className="text-xs text-zinc-500">Resistance</span>
-            <p className="text-lg font-bold text-red-400">{latestTrade ? latestTrade.resistance : "N/A"}</p>
+            <p className="text-lg font-bold text-rose-400">{latestTrade ? latestTrade.resistance : "N/A"}</p>
           </div>
           <div>
             <span className="text-xs text-zinc-500">Support</span>
-            <p className="text-lg font-bold text-green-400">{latestTrade ? latestTrade.support : "N/A"}</p>
+            <p className="text-lg font-bold text-emerald-400">{latestTrade ? latestTrade.support : "N/A"}</p>
           </div>
         </div>
         <div className="mt-3 border-t border-zinc-900 pt-3 text-[12px] text-zinc-400">

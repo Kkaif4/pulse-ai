@@ -1,53 +1,48 @@
-import { useState, useRef, useEffect } from "react";
+"use client";
+
+import React, { useState } from "react";
 import { Trade, V3VersionTrade } from "../types";
+import { useChartZoomPan } from "../hooks/useChartZoomPan";
+import { getSignalTheme, formatTime } from "../lib/trade-utils";
+import { MaximizeIcon, MinimizeIcon } from "./common/Icons";
 
 export function InteractiveTradingChart({ trades }: { trades: (Trade | V3VersionTrade)[] }) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null);
   const [showSpot, setShowSpot] = useState<boolean>(true);
   const [showPcr, setShowPcr] = useState<boolean>(true);
-  const svgRef = useRef<SVGSVGElement | null>(null);
-  const wrapperRef = useRef<HTMLDivElement | null>(null);
-  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 
-  const [zoomRange, setZoomRange] = useState<{ start: number; end: number }>({ start: 0, end: 1 });
-  const [isDragging, setIsDragging] = useState(false);
-  const dragStartRef = useRef<number | null>(null);
-  const zoomRangeStartOnDragRef = useRef<{ start: number; end: number } | null>(null);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-
-  // Sync Escape key to exit fullscreen
-  useEffect(() => {
-    if (!isFullscreen) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setIsFullscreen(false);
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isFullscreen]);
-
-  // Auto-scroll to extreme right (latest data) on load, zoom change, or data updates
-  useEffect(() => {
-    const scroll = () => {
-      if (scrollContainerRef.current) {
-        scrollContainerRef.current.scrollLeft = scrollContainerRef.current.scrollWidth;
-      }
-    };
-    scroll();
-    const timer = setTimeout(scroll, 50);
-    return () => clearTimeout(timer);
-  }, [trades.length, isFullscreen]);
-
-  const startIndex = Math.max(0, Math.floor(zoomRange.start * (trades.length - 1)));
-  const endIndex = Math.min(trades.length - 1, Math.ceil(zoomRange.end * (trades.length - 1)));
-  const visibleTrades = trades.slice(startIndex, endIndex + 1);
-
-  // In fullscreen, we want the chart to fit exactly onto a single screen without scrollbars.
-  const chartWidth = isFullscreen ? 1200 : Math.max(800, visibleTrades.length * 14);
-  const height = 300;
   const padding = { top: 20, right: 45, bottom: 35, left: 55 };
+  const {
+    zoomRange,
+    startIndex,
+    endIndex,
+    chartWidth,
+    isDragging,
+    isFullscreen,
+    toggleFullscreen,
+    svgRef,
+    wrapperRef,
+    scrollContainerRef,
+    handleMouseDown,
+    handleMouseMoveForPan,
+    handleMouseUp,
+    calculateHoverIndex,
+    handleResetZoom,
+    handleSliderChange,
+  } = useChartZoomPan({ dataLength: trades.length, padding });
+
+  const isZoomed = zoomRange.start > 0 || zoomRange.end < 1;
+  const visibleTrades = trades.slice(startIndex, endIndex + 1);
+  const height = 300;
+
+  if (trades.length === 0) {
+    return (
+      <div className="flex h-full w-full items-center justify-center text-zinc-500 text-xs py-12">
+        No data points logged. Waiting for live feed...
+      </div>
+    );
+  }
 
   const spotPrices = visibleTrades.map((t) => Number(t.spotPrice));
   const pcrs = visibleTrades.map((t) => Number(t.pcr));
@@ -97,198 +92,104 @@ export function InteractiveTradingChart({ trades }: { trades: (Trade | V3Version
     }
   });
 
-  useEffect(() => {
-    const svgEl = svgRef.current;
-    if (!svgEl) return;
-
-    const handleWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      if (trades.length < 5) return;
-
-      const zoomIntensity = 0.08;
-
-      setZoomRange((prev) => {
-        const currentSpan = prev.end - prev.start;
-        const change = currentSpan * zoomIntensity * (e.deltaY > 0 ? 1 : -1);
-
-        const rect = svgEl.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left;
-        const viewBoxX = (mouseX / rect.width) * chartWidth;
-        const innerChartWidth = chartWidth - padding.left - padding.right;
-        const relativeX = viewBoxX - padding.left;
-        const pct = Math.max(0, Math.min(1, relativeX / innerChartWidth));
-
-        let newStart = prev.start + change * pct;
-        let newEnd = prev.end - change * (1 - pct);
-
-        const minSpan = Math.max(0.02, 5 / trades.length);
-        if (newEnd - newStart < minSpan) {
-          const center = (prev.start + prev.end) / 2;
-          newStart = center - minSpan / 2;
-          newEnd = center + minSpan / 2;
-        }
-
-        newStart = Math.max(0, newStart);
-        newEnd = Math.min(1, newEnd);
-
-        return { start: newStart, end: newEnd };
-      });
-    };
-
-    svgEl.addEventListener("wheel", handleWheel, { passive: false });
-    return () => {
-      svgEl.removeEventListener("wheel", handleWheel);
-    };
-  }, [trades.length, chartWidth]);
-
-  if (trades.length === 0) {
-    return (
-      <div className="flex h-full w-full items-center justify-center text-zinc-500 text-xs py-12">
-        No data points logged. Waiting for live feed...
-      </div>
-    );
-  }
-
-  const handleMouseDown = (e: React.MouseEvent<SVGSVGElement>) => {
-    if (zoomRange.start > 0 || zoomRange.end < 1) {
-      setIsDragging(true);
-      dragStartRef.current = e.clientX;
-      zoomRangeStartOnDragRef.current = { ...zoomRange };
-    }
-  };
-
   const handleMouseMove = (e: React.MouseEvent<SVGSVGElement, MouseEvent>) => {
-    if (!svgRef.current) return;
-    const rect = svgRef.current.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-
-    const viewBoxX = (mouseX / rect.width) * chartWidth;
-
-    if (isDragging && dragStartRef.current !== null && zoomRangeStartOnDragRef.current !== null) {
-      const deltaX = e.clientX - dragStartRef.current;
-      const mainChartWidth = chartWidth - padding.left - padding.right;
-      const chartWidthInDOM = rect.width * (mainChartWidth / chartWidth);
-      const pctChange = deltaX / chartWidthInDOM;
-
-      const span = zoomRangeStartOnDragRef.current.end - zoomRangeStartOnDragRef.current.start;
-      let newStart = zoomRangeStartOnDragRef.current.start - pctChange * span;
-      let newEnd = zoomRangeStartOnDragRef.current.end - pctChange * span;
-
-      if (newStart < 0) {
-        newStart = 0;
-        newEnd = span;
-      }
-      if (newEnd > 1) {
-        newEnd = 1;
-        newStart = 1 - span;
-      }
-
-      setZoomRange({ start: newStart, end: newEnd });
-    }
-
-    const innerChartWidth = chartWidth - padding.left - padding.right;
-    const relativeX = viewBoxX - padding.left;
-    const pct = Math.max(0, Math.min(1, relativeX / innerChartWidth));
-    const visibleLength = endIndex - startIndex;
-    const index = startIndex + Math.round(pct * visibleLength);
-
-    if (index >= startIndex && index <= endIndex && index < trades.length) {
+    handleMouseMoveForPan(e.clientX);
+    const index = calculateHoverIndex(e.clientX);
+    if (index !== null) {
       setHoveredIndex(index);
-      setTooltipPos({ x: mouseX + 15, y: mouseY - 15 });
-    } else {
-      setHoveredIndex(null);
-      setTooltipPos(null);
+      if (wrapperRef.current) {
+        const wrapRect = wrapperRef.current.getBoundingClientRect();
+        let posX = e.clientX - wrapRect.left + 15;
+        let posY = e.clientY - wrapRect.top - 80;
+        if (posX + 180 > wrapRect.width) posX = e.clientX - wrapRect.left - 190;
+        if (posY < 10) posY = e.clientY - wrapRect.top + 20;
+        setTooltipPos({ x: Math.max(10, posX), y: Math.max(10, posY) });
+      }
     }
-  };
-
-  const handleMouseUp = () => {
-    setIsDragging(false);
-    dragStartRef.current = null;
-    zoomRangeStartOnDragRef.current = null;
   };
 
   const handleMouseLeave = () => {
-    setIsDragging(false);
-    dragStartRef.current = null;
-    zoomRangeStartOnDragRef.current = null;
+    handleMouseUp();
     setHoveredIndex(null);
     setTooltipPos(null);
   };
 
-  const resetZoom = () => {
-    setZoomRange({ start: 0, end: 1 });
-  };
-
-  const isZoomed = zoomRange.start > 0 || zoomRange.end < 1;
   const hoveredTrade = hoveredIndex !== null ? trades[hoveredIndex] : null;
 
   return (
     <div
       ref={wrapperRef}
-      className={`flex flex-col ${
+      className={`flex flex-col select-none transition-all ${
         isFullscreen
-          ? "fixed inset-0 z-50 bg-zinc-950 p-6"
-          : "h-full w-full bg-zinc-950/80 rounded-xl border border-zinc-800/80 p-4 shadow-2xl backdrop-blur-xl"
+          ? "fixed inset-0 z-50 bg-zinc-950 p-6 flex flex-col justify-between"
+          : "relative w-full h-full"
       }`}
     >
-      {/* Header controls */}
-      <div className="flex items-center justify-between gap-2 mb-3 text-xs">
+      {/* Chart Toolbar Controls */}
+      <div className="flex flex-wrap items-center justify-between gap-3 text-xs mb-3">
         <div className="flex items-center gap-2">
-          <span className="font-semibold text-zinc-200 tracking-wide text-sm">pulseAI Live Chart</span>
-          <span className="text-zinc-500 text-[11px] font-mono">({trades.length} pts, Full Day)</span>
-        </div>
-        {isZoomed && (
-          <button
-            onClick={resetZoom}
-            className="mr-auto px-2.5 py-1 rounded border border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-zinc-200 transition-colors"
-          >
-            Reset Zoom
-          </button>
-        )}
-        <button
-          onClick={() => setShowSpot(!showSpot)}
-          className={`flex items-center gap-1.5 px-2.5 py-1 rounded border transition-colors ${
-            showSpot
-              ? "bg-sky-500/10 border-sky-500 text-sky-400 font-medium"
-              : "bg-zinc-900 border-zinc-800 text-zinc-500"
-          }`}
-        >
-          <span className={`w-2 h-2 rounded-full ${showSpot ? "bg-sky-400" : "bg-zinc-600"}`} />
-          Spot Price
-        </button>
-        <button
-          onClick={() => setShowPcr(!showPcr)}
-          className={`flex items-center gap-1.5 px-2.5 py-1 rounded border transition-colors ${
-            showPcr
-              ? "bg-orange-500/10 border-orange-500 text-orange-400 font-medium"
-              : "bg-zinc-900 border-zinc-800 text-zinc-500"
-          }`}
-        >
-          <span className={`w-2 h-2 rounded-full ${showPcr ? "bg-orange-400" : "bg-zinc-600"}`} />
-          PCR Trend
-        </button>
-        <button
-          onClick={() => setIsFullscreen(!isFullscreen)}
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded border border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-zinc-200 transition-colors font-medium"
-          title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
-        >
-          {isFullscreen ? (
-            <>
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 9L4 4m0 0l5 0m-5 0l0 5m11-5l5 5m0-5l-5 0m0 0l0 5m-6 6l-5 5m0 0l0-5m0 5l5 0m11-5l-5 5m5 0l0-5m0 5l-5 0" />
-              </svg>
-              <span>Exit Fullscreen</span>
-            </>
-          ) : (
-            <>
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-              </svg>
-              <span>Full Screen</span>
-            </>
+          <span className="text-zinc-500 font-mono text-[11px]">Zoom:</span>
+          <input
+            type="range"
+            min="0"
+            max="0.95"
+            step="0.01"
+            value={1 - (zoomRange.end - zoomRange.start)}
+            onChange={handleSliderChange}
+            className="h-1.5 w-24 sm:w-32 rounded-lg bg-zinc-800 accent-sky-500 cursor-pointer"
+            title="Slide or scroll with mouse-wheel inside chart to zoom"
+          />
+          {isZoomed && (
+            <button
+              onClick={handleResetZoom}
+              className="text-[11px] bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-2 py-0.5 rounded transition-colors"
+            >
+              Reset Zoom
+            </button>
           )}
-        </button>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => setShowSpot(!showSpot)}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded border text-xs transition-colors ${
+              showSpot
+                ? "bg-sky-500/10 border-sky-500 text-sky-400 font-medium"
+                : "bg-zinc-900 border-zinc-800 text-zinc-500"
+            }`}
+          >
+            <span className={`w-2 h-2 rounded-full ${showSpot ? "bg-sky-400" : "bg-zinc-600"}`} />
+            Spot Price
+          </button>
+          <button
+            onClick={() => setShowPcr(!showPcr)}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded border text-xs transition-colors ${
+              showPcr
+                ? "bg-orange-500/10 border-orange-500 text-orange-400 font-medium"
+                : "bg-zinc-900 border-zinc-800 text-zinc-500"
+            }`}
+          >
+            <span className={`w-2 h-2 rounded-full ${showPcr ? "bg-orange-400" : "bg-zinc-600"}`} />
+            PCR Trend
+          </button>
+          <button
+            onClick={toggleFullscreen}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded border border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-zinc-200 transition-colors text-xs font-medium"
+            title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+          >
+            {isFullscreen ? (
+              <>
+                <MinimizeIcon className="w-3.5 h-3.5" />
+                <span>Exit Fullscreen</span>
+              </>
+            ) : (
+              <>
+                <MaximizeIcon className="w-3.5 h-3.5" />
+                <span>Fullscreen</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
       <div
@@ -339,7 +240,7 @@ export function InteractiveTradingChart({ trades }: { trades: (Trade | V3Version
             <path d={spotPath} fill="none" stroke="#0ea5e9" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
           )}
 
-          {/* PCR Line (right axis representation) */}
+          {/* PCR Line */}
           {showPcr && (
             <path d={pcrPath} fill="none" stroke="#f97316" strokeWidth={1.5} strokeDasharray="4,2" strokeLinecap="round" strokeLinejoin="round" />
           )}
@@ -349,20 +250,20 @@ export function InteractiveTradingChart({ trades }: { trades: (Trade | V3Version
             const absoluteIndex = startIndex + i;
             const x = getX(absoluteIndex);
             const y = getYSpot(Number(t.spotPrice));
-            if (t.signal && t.signal.includes("BUY CE")) {
+            if (t.signal && (t.signal.includes("BUY CE") || t.signal.includes("HOLD CE"))) {
               return (
                 <polygon
                   key={absoluteIndex}
                   points={`${x},${y - 6} ${x - 5},${y + 3} ${x + 5},${y + 3}`}
-                  fill="#22c55e"
+                  fill="#10b981"
                 />
               );
-            } else if (t.signal && t.signal.includes("BUY PE")) {
+            } else if (t.signal && (t.signal.includes("BUY PE") || t.signal.includes("HOLD PE"))) {
               return (
                 <polygon
                   key={absoluteIndex}
                   points={`${x},${y + 6} ${x - 5},${y - 3} ${x + 5},${y - 3}`}
-                  fill="#ef4444"
+                  fill="#f43f5e"
                 />
               );
             } else if (t.signal && t.signal.includes("EXIT")) {
@@ -371,7 +272,7 @@ export function InteractiveTradingChart({ trades }: { trades: (Trade | V3Version
             return null;
           })}
 
-          {/* Hover elements */}
+          {/* Hover crosshairs & dots */}
           {hoveredIndex !== null && hoveredTrade && (
             <g>
               <line
@@ -392,13 +293,13 @@ export function InteractiveTradingChart({ trades }: { trades: (Trade | V3Version
           )}
         </svg>
 
-        {/* Tooltip HTML Overlay */}
+        {/* Tooltip Overlay */}
         {tooltipPos && hoveredTrade && (
           <div
             className="absolute z-50 rounded-lg border border-zinc-800 bg-zinc-950/95 p-3 shadow-xl backdrop-blur-md pointer-events-none text-xs font-sans min-w-[170px]"
             style={{ left: tooltipPos.x, top: tooltipPos.y }}
           >
-            <div className="text-zinc-500 font-mono mb-1">{new Date(hoveredTrade.timestamp).toLocaleTimeString()}</div>
+            <div className="text-zinc-500 font-mono mb-1">{formatTime(hoveredTrade.timestamp, true)}</div>
             {showSpot && (
               <div className="flex justify-between gap-4">
                 <span className="text-zinc-400">Spot Price:</span>
@@ -414,14 +315,7 @@ export function InteractiveTradingChart({ trades }: { trades: (Trade | V3Version
             {showSpot && hoveredTrade.signal && (
               <div className="flex justify-between gap-4 border-t border-zinc-900 mt-1.5 pt-1.5">
                 <span className="text-zinc-400">Signal:</span>
-                <span
-                  className={`font-bold ${hoveredTrade.signal.includes("BUY CE")
-                    ? "text-green-400"
-                    : hoveredTrade.signal.includes("BUY PE")
-                      ? "text-red-400"
-                      : "text-zinc-400"
-                    }`}
-                >
+                <span className={`font-bold ${getSignalTheme(hoveredTrade.signal).text}`}>
                   {hoveredTrade.signal}
                 </span>
               </div>

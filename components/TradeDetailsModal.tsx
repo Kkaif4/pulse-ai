@@ -1,6 +1,9 @@
+"use client";
+
 import React from "react";
 import { Trade } from "../types";
-import { parseSummary } from "./parseSummary";
+import { parseSummary, getSignalTheme } from "../lib/trade-utils";
+import { CloseIcon } from "./common/Icons";
 
 interface TradeDetailsModalProps {
   trade: Trade;
@@ -9,6 +12,8 @@ interface TradeDetailsModalProps {
 }
 
 export function TradeDetailsModal({ trade, onClose, onDelete }: TradeDetailsModalProps) {
+  const theme = getSignalTheme(trade.signal);
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm transition-opacity duration-300"
@@ -21,12 +26,16 @@ export function TradeDetailsModal({ trade, onClose, onDelete }: TradeDetailsModa
         <div className="absolute top-4 right-4 flex items-center gap-3">
           <button
             onClick={() => onDelete(trade.id)}
-            className="rounded-lg bg-red-950/40 border border-red-900/60 px-3 py-1.5 text-xs font-semibold text-red-400 hover:bg-red-900/30 transition-all duration-200"
+            className="rounded-lg bg-rose-950/40 border border-rose-900/60 px-3 py-1.5 text-xs font-semibold text-rose-400 hover:bg-rose-900/30 transition-all duration-200"
           >
             Delete Log
           </button>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-white">
-            ✕
+          <button
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-white transition-colors"
+            title="Close"
+          >
+            <CloseIcon className="w-4 h-4" />
           </button>
         </div>
 
@@ -82,35 +91,17 @@ export function TradeDetailsModal({ trade, onClose, onDelete }: TradeDetailsModa
             </div>
           </div>
 
-          <div
-            className={`rounded-xl border p-5 backdrop-blur-md transition-all duration-300 ${
-              trade.signal.includes("BUY CE")
-                ? "border-green-500/20 bg-green-950/10 text-green-200"
-                : trade.signal.includes("BUY PE")
-                ? "border-red-500/20 bg-red-950/10 text-red-200"
-                : trade.signal.includes("EXIT")
-                ? "border-purple-500/20 bg-purple-950/10 text-purple-200"
-                : "border-zinc-800 bg-zinc-950/50 text-zinc-300"
-            }`}
-          >
+          <div className={`rounded-xl border p-5 backdrop-blur-md transition-all duration-300 ${theme.subBorder} ${theme.subBg} ${theme.subText}`}>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold uppercase tracking-wider opacity-60">Engine Summary Analysis</span>
-                <span
-                  className={`rounded px-2.5 py-0.5 text-xs font-bold ${
-                    trade.signal.includes("BUY CE")
-                      ? "bg-green-500/10 text-green-400"
-                      : trade.signal.includes("BUY PE")
-                      ? "bg-red-500/10 text-red-400"
-                      : "bg-zinc-800 text-zinc-400"
-                  }`}
-                >
+                <span className={`rounded px-2.5 py-0.5 text-xs font-bold ${theme.badge}`}>
                   {trade.signal}
                 </span>
               </div>
               <div className="grid grid-cols-2 gap-x-6 gap-y-2.5 text-xs font-medium">
                 {parseSummary(trade.summary).map((item, idx) => (
-                  <div key={idx} className="flex justify-between border-b border-zinc-850/40 pb-1.5">
+                  <div key={idx} className="flex justify-between border-b border-zinc-800/40 pb-1.5">
                     <span className="text-zinc-400 font-semibold">{item.key}</span>
                     <span className="text-white font-mono">{item.value}</span>
                   </div>

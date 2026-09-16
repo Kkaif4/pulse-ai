@@ -69,5 +69,13 @@ export const api = {
       const { data } = await apiClient.delete(`/trades/${id}`);
       return data;
     },
+    getBufferStatus: async () => {
+      const { data } = await apiClient.get("/trades/buffer/status");
+      return data as { status: string; pendingQueueCount: number };
+    },
+    flushBuffer: async () => {
+      const { data } = await apiClient.post("/trades/buffer/flush");
+      return data as { message: string; result: { flushedV2: number; flushedV3: number; flushedLegacy: number; flushedVolume: number } };
+    },
   },
 };

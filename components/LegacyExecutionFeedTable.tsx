@@ -1,5 +1,9 @@
-import React from "react";
+"use client";
+
+import React, { useMemo } from "react";
+import { LayersIcon } from "./common/Icons";
 import { LegacyTrade } from "../types";
+import { getSignalTheme, formatTime } from "../lib/trade-utils";
 
 interface LegacyExecutionFeedTableProps {
   trades: LegacyTrade[];
@@ -12,24 +16,26 @@ export function LegacyExecutionFeedTable({
   onSelectTrade,
   onSelectSentiment,
 }: LegacyExecutionFeedTableProps) {
-  const todaysTrades = trades.filter((t) => {
-    const tradeDate = new Date(t.timestamp);
+  const displayTrades = useMemo(() => {
     const today = new Date();
-    return (
-      tradeDate.getDate() === today.getDate() &&
-      tradeDate.getMonth() === today.getMonth() &&
-      tradeDate.getFullYear() === today.getFullYear()
-    );
-  });
-
-  const displayTrades = todaysTrades.length > 0 ? todaysTrades : trades;
+    const todaysTrades = trades.filter((t) => {
+      const tradeDate = new Date(t.timestamp);
+      return (
+        tradeDate.getDate() === today.getDate() &&
+        tradeDate.getMonth() === today.getMonth() &&
+        tradeDate.getFullYear() === today.getFullYear()
+      );
+    });
+    return todaysTrades.length > 0 ? todaysTrades : trades;
+  }, [trades]);
 
   return (
     <div className="rounded-xl border border-zinc-900 bg-zinc-900/20 p-4">
       <div className="flex items-center justify-between mb-3">
         <div>
           <h3 className="text-base font-bold tracking-tight text-purple-400 flex items-center gap-2">
-            <span>🏛️ Legacy Engine</span>
+            <LayersIcon className="w-4 h-4 text-purple-400" />
+            <span>Legacy Engine</span>
           </h3>
           <p className="text-xs text-zinc-500 mt-0.5">Classic rule-based PCR &amp; OI heuristic engine</p>
         </div>
@@ -58,29 +64,7 @@ export function LegacyExecutionFeedTable({
               </tr>
             ) : (
               displayTrades.map((t) => {
-                const signalUpper = (t.signal || "").toUpperCase();
-                const isBuyCE = signalUpper.includes("BUY CE");
-                const isBuyPE = signalUpper.includes("BUY PE");
-
-                let signalBadge = (
-                  <span className="rounded bg-zinc-800 px-2 py-0.5 font-medium text-zinc-400">
-                    {t.signal || "Sideways"}
-                  </span>
-                );
-
-                if (isBuyCE) {
-                  signalBadge = (
-                    <span className="rounded bg-emerald-500/20 px-2 py-0.5 font-bold text-emerald-400 border border-emerald-500/30">
-                      {t.signal}
-                    </span>
-                  );
-                } else if (isBuyPE) {
-                  signalBadge = (
-                    <span className="rounded bg-rose-500/20 px-2 py-0.5 font-bold text-rose-400 border border-rose-500/30">
-                      {t.signal}
-                    </span>
-                  );
-                }
+                const theme = getSignalTheme(t.signal);
 
                 return (
                   <tr
@@ -88,20 +72,18 @@ export function LegacyExecutionFeedTable({
                     onClick={() => onSelectTrade?.(t.timestamp)}
                     className="hover:bg-zinc-800/40 transition-colors cursor-pointer"
                   >
-                    <td className="py-2.5 px-3 font-mono text-zinc-300">
-                      {new Date(t.timestamp).toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                        hour12: false,
-                      })}
+                    <td className="py-2.5 px-3 font-mono text-zinc-300 whitespace-nowrap">
+                      {formatTime(t.timestamp, true)}
                     </td>
-                    <td className="py-2.5 px-3 font-mono text-white font-medium">
+                    <td className="py-2.5 px-3 font-mono text-white font-bold whitespace-nowrap">
                       ₹{Number(t.spotPrice).toFixed(1)}
                     </td>
-                    <td className="py-2.5 px-3">{signalBadge}</td>
-                    <td className="py-2.5 px-3 font-mono text-zinc-300">
-                      {Number(t.pcr).toFixed(2)}
+                    <td className="py-2.5 px-3">
+                      <span className={`rounded px-2 py-0.5 font-bold text-xs ${theme.badge}`}>
+                        {t.signal || "Sideways"}
+                      </span>
                     </td>
+                    <td className="py-2.5 px-3 font-mono text-zinc-200">{Number(t.pcr).toFixed(2)}</td>
                     <td className="py-2.5 px-3">
                       <button
                         onClick={(e) => {

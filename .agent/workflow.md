@@ -1,12 +1,12 @@
 # PulseAI — End-to-End System Workflow
 
-This document provides a comprehensive operational blueprint of the entire PulseAI platform across **Backend (`pulse_ai_backend`)** and **Frontend (`pulse_ai_frontend`)**. It details the exact sequence of events, data pipelines, state transitions, broadcasting mechanisms, and client-side ingestion paths.
+This document provides a comprehensive operational blueprint of the entire PulseAI platform across **Backend (`pulse_ai_backend`)** and **Frontend (`pulse_ai_frontend`)**. It details the exact sequence of events, data pipelines, state transitions, broadcasting mechanisms, buffer synchronization, and client-side ingestion paths.
 
 ---
 
 ## 1. High-Level Architecture Workflow
 
-PulseAI operates on a **server-driven global tick architecture**. Market data is fetched, calculated, and persisted server-side once every 60 seconds during active Indian market hours (9:15 AM – 3:30 PM IST), completely independent of how many users are logged in. Clients simply connect and consume the live broadcast.
+PulseAI operates on a **buffered global tick architecture**. Market data is fetched, calculated, and buffered server-side once every 60 seconds during active Indian market hours (9:15 AM – 3:30 PM IST), completely independent of how many users are logged in. Clients consume the live WebSocket broadcast, while database writes are decoupled via micro-batches and End-of-Day (EOD) flushes.
 
 ```mermaid
 flowchart TD
@@ -26,10 +26,10 @@ flowchart TD
         I -- < 60 Candles --> K[Preload Historical Warmup Candles]
     end
 
-    subgraph State_Preload [Database & State Preloading]
-        D --> L[Fetch Today's History from Postgres trades & v3_version_data]
+    subgraph State_Preload [Zero-DB State Preloading]
+        D --> L[Fetch Today's History from In-Memory Buffer / Redis]
         D --> M[Fetch Date-Scoped Redis Snapshot: pulse_ai:last_snapshot:YYYY-MM-DD]
-        D --> N[Fetch Active Trade States: Postgres trade_state]
+        D --> N[Fetch Active Trade States: In-Memory Cache]
     end
 
     subgraph Engines [Triple-Engine Execution]
@@ -38,317 +38,180 @@ flowchart TD
         G & L & M --> O3[Engine 3: Legacy Rule-Based Engine]
     end
 
-    subgraph Persistence [Persistence & Caching]
-        O1 --> P1[Postgres: INSERT into trades]
-        O2 --> P2[Postgres: INSERT into v3_version_data]
-        O2 --> P3[Postgres: UPSERT daily_minute_volumes R-Vol]
-        O3 --> P4[Postgres: INSERT into legacy_version_data]
-        O1 & O2 --> P5[Postgres: UPSERT trade_state active_state & active_state_v3]
-        G --> P6[Redis: SET pulse_ai:last_snapshot:YYYY-MM-DD EX 24h]
-        O1 --> P7[Generate SVG Plots -> Redis: SET pulse_ai:chart:* EX 24h]
+    subgraph Persistence [Multi-Tier Buffer & Batch Persistence]
+        O1 & O2 & O3 --> P1[Tier 1: In-Memory Rolling Window < 500 ticks]
+        O1 & O2 & O3 --> P2[Tier 2: Append-Only Local File data/signals-YYYY-MM-DD.jsonl]
+        O1 & O2 & O3 --> P3[Tier 3: Redis Lists pulse_ai:buffer:queue EX 48h]
+        P1 --> P4{Flush Trigger? Every 10 Cycles or EOD 15:31 IST or Manual Sync}
+        P4 -- Yes --> P5[Postgres Parallel createMany via withDbRetry]
     end
 
     subgraph Realtime_Broadcast [WebSocket Real-Time Distribution]
         P1 --> Q1[Redis Pub/Sub: pulse_ai:trades:new]
-        P2 --> Q2[Redis Pub/Sub: pulse_ai:trades_v3:new]
-        P4 --> Q3[Redis Pub/Sub: pulse_ai:trades_legacy:new]
-        Q1 & Q2 & Q3 --> R[Node.js WebSocket Server Server-Side Listener]
-        R --> S[Broadcast to 500+ Connected WS Clients with JWT Verification]
+        P1 --> Q2[Redis Pub/Sub: pulse_ai:trades_v3:new]
+        P1 --> Q3[Redis Pub/Sub: pulse_ai:trades_legacy:new]
+        Q1 & Q2 & Q3 --> R[Node.js WebSocket Server Listener]
+        R --> S[Broadcast to Connected WS Clients with JWT Verification]
         R --> T[1-Second Heartbeat Pulse: countdown:tick]
     end
 
-    subgraph Frontend_App [Frontend Next.js / Electron / Capacitor]
-        S --> U[WS onmessage Listener: App / Dashboard State]
-        U --> V1[Update Live Engine Card]
-        U --> V2[Update Unified Multi-Engine Synchronized Table]
-        U --> V3[Update Interactive SVG Trading / Aggression / MaxPain Charts]
-        U --> V4[4th-Column Side-by-Side Divergence Analysis]
+    subgraph Frontend_App [Frontend Modular Next.js Client]
+        S --> U1[useMarketFeed Hook: Live Stream & Gap Backfilling]
+        T --> U2[NavigationHeader: 60s Circular Countdown & Buffer Badge]
+        U1 --> U3[OverviewView: Hero Card, KPIs, Unified Multi-Engine Table]
+        U3 --> U4[TradeComparisonColumn: 4th Column Instant Tick Comparison]
+        U1 --> U5[Lazy ChartsView: Interactive SVG Charts via useChartZoomPan]
+        U1 --> U6[Lazy HistoryView: Calendar Date Lookup]
     end
 ```
 
 ---
 
-## 2. Detailed Cron Worker Execution Cycle (`src/cron-worker.ts`)
+## 2. 60-Second Background Market Ingestion Cycle
 
-The background cron worker is triggered every minute (`* * * * *`). It performs the following sequential actions:
+Every 60 seconds, `src/cron-worker.ts` executes the following sequential steps:
 
-### Step 1: Market Schedule & Calendar Verification
-- Uses `src/workers/market-calendar.helper.ts`.
-- Computes current time in India Standard Time (`Asia/Kolkata`, UTC+5:30).
-- Skips execution if:
-  1. Day is Saturday (6) or Sunday (0).
-  2. Date matches one of the declared `NSE_HOLIDAYS_2026` dates (e.g. Republic Day, Holi, Diwali, etc.).
-  3. Time is before 09:15 IST or after 15:30 IST.
+### Step 1: Calendar Validation & Overlap Mutex
+1. Checks whether the current time is within Indian market hours (09:15 to 15:30 IST), weekday (Mon–Fri), and not an official NSE trading holiday.
+2. Acquires distributed Redis lock `pulse_ai:overlap_lock` with a 55-second TTL. If previous execution is still running, current cycle is skipped cleanly.
 
-### Step 2: Distributed Overlap Lock Acquisition
-- Redis key: `pulse_ai:overlap_lock`.
-- Command: `redis.set("pulse_ai:overlap_lock", "locked", "EX", 55, "NX")`.
-- If key exists, the previous cycle is still executing or network latency delayed API responses. The worker safely logs an overlap prevention warning and returns early.
-- The `finally` block releases the lock upon completion or failure.
+### Step 2: Parallel Market Data Ingestion
+1. Queries Upstox API v3 for:
+   - Complete NIFTY 50 Option Chain (LTP, OI, Greeks, bid/ask depth).
+   - India VIX index level.
+   - 1-minute historical spot candles for true OHLC indicator calculations.
+2. If Upstox API fails or rate-limits, falls back to the automated NSE scraper client (`src/utils/nse-client.util.ts`).
 
-### Step 3: Historical Data & Previous State Retrieval
-- **Today's Trades History**: Fetches up to 1,000 trades from PostgreSQL `trades` where `timestamp >= today 00:00:00 IST`. Sorts chronologically for EMA, RSI, and ADX calculations.
-- **V3 Trades History**: Fetches up to 1,000 trades from PostgreSQL `v3_version_data` for V3 state tracking.
-- **Option Chain Snapshot**: Reads Redis key `pulse_ai:last_snapshot:${istDateStr}`. The key is date-scoped to eliminate overnight contamination (prevents opening ticks from comparing against previous day close OI).
-- **Active Trade States**: Reads PostgreSQL table `trade_state` for keys `active_state` (V2 state machine) and `active_state_v3` (V3 state machine).
+### Step 3: Zero-DB State Preloading
+1. Fetches today's trade history directly from the in-memory `TradesBufferService` (or Redis `pulse_ai:buffer:v3:YYYY-MM-DD`).
+2. Zero PostgreSQL queries are issued during active minute cycles.
 
-### Step 4: Multi-Source Market Data Ingestion
-- **Option Chain (`fetchOptionChainFromUpstox`)**:
-  - Symbol: `NSE_INDEX|Nifty 50`.
-  - Upstox API v3 retrieves strike-grouped contracts with:
-    - Calls (`CE`): LTP, OI, Chg OI, Volume, IV, Greeks (Delta, Gamma, Theta, Vega), Bid/Ask prices & quantities.
-    - Puts (`PE`): LTP, OI, Chg OI, Volume, IV, Greeks, Bid/Ask.
-    - Underlying NIFTY Spot Price.
-  - Retries up to 3 times with exponential backoff.
-  - If Upstox API fails or tokens expire, it falls back to the scraping client `src/utils/nse-client.util.ts`.
-- **India VIX (`fetchIndiaVix`)**:
-  - Fetches quote for `NSE_INDEX|India VIX`. Fallback to standard 15.0 if unavailable.
-- **Nifty 1-Minute Candles (`fetchNiftyCandles`)**:
-  - Fetches intraday 1-minute OHLC candles for Nifty spot.
-  - If candles count < 60 (early morning), it invokes `fetchHistoricalNiftyCandles` to warm up with the previous trading session's last 30 candles.
+### Step 4: Triple-Engine Calculations
+1. **Engine 1: V2 Analysis (`src/scripts/v2_analyze.ts`)**:
+   - Calculates volume PCR, OI PCR, Max Pain, Support/Resistance levels.
+   - Updates state machine (`active_state`) with hold cycles and cooldowns.
+2. **Engine 2: V3 Volatility & Risk Engine (`src/scripts/v3_analyze.ts`)**:
+   - Evaluates India VIX regime, Greeks (Delta, spreads), and depth order flow imbalance.
+   - Calculates true RSI(10), ADX(14), and ATR(14) on 1-minute OHLC candles.
+   - Manages dynamic ATR stop-losses, take-profits, and trailing stops.
+3. **Engine 3: Legacy Rule-Based Engine (`src/scripts/legacy_analyze.ts`)**:
+   - Computes classic rule-based PCR heuristics.
 
-### Step 5: Triple-Engine Execution
+### Step 5: Multi-Tier Buffer Storage
+Instead of issuing individual `INSERT` queries to PostgreSQL every minute, signals are written to:
+- **Tier 1 (In-Memory)**: Rolling array in `TradesBufferService` (< 500 items) serving live reads in `< 1ms`.
+- **Tier 2 (Append-Only Disk)**: `data/signals-YYYY-MM-DD.jsonl` ensuring zero data loss across process restarts.
+- **Tier 3 (Redis Queue)**: Redis list `pulse_ai:buffer:queue` for cluster persistence.
 
-#### Engine 1: V2 Analysis (`src/scripts/v2_analyze.ts`)
-1. Computes core option metrics:
-   - Volume/OI-weighted ATM Strike selection.
-   - Put-Call Ratio (PCR = total PE volume / total CE volume).
-   - Max Pain strike (minimizes total option buyers payout).
-   - Support (Max PE OI strike) & Resistance (Max CE OI strike).
-   - IV Skew (Average PE IV - CE IV near ATM).
-   - ATM Straddle Cost (ATM CE LTP + ATM PE LTP).
-2. Calculates technicals:
-   - RSI (10-period Wilders on spot history).
-   - ADX (14-period on synthetic/spot moves with DI crossover).
-   - Spot Trend & EMA Trend (10-period EMA).
-3. Computes F&O Buildup Score:
-   - Categorizes each strike into Long Buildup, Short Buildup, Long Unwinding, Short Covering.
-   - Aggregates and clips to `[-0.75, +0.75]`.
-4. Executes V2 State Machine:
-   - Evaluates composite conviction score `[-1.0, +1.0]`.
-   - Applies hysteresis entry (`PULSE_ENTRY_SCORE = 0.60`) and exit (`PULSE_EXIT_SCORE = 0.25`).
-   - Enforces `min_hold_cycles` (3 minutes) and `cooldown_cycles` (3 minutes after exit).
-   - Produces signals: `BUY CE`, `BUY PE`, `HOLD CE`, `HOLD PE`, `EXIT CE (...)`, `EXIT PE (...)`.
+### Step 6: Micro-Batch & EOD Database Persistence
+1. Every 10 cron cycles (~10 minutes), the buffer flushes pending rows in parallel using pooler-safe `createMany`.
+2. At **15:31 IST** (market close), an automated EOD cron job (`31 15 * * 1-5`) executes a final sync to PostgreSQL.
+3. Process shutdown handlers (`SIGINT`, `SIGTERM`) guarantee that all buffered signals are flushed before exit.
 
-#### Engine 2: V3 Analysis (`src/scripts/v3_analyze.ts`)
-1. Option Greeks & Microstructure Imbalance:
-   - Computes ATM `ceDelta` and `peDelta`.
-   - Computes ATM Bid/Ask spreads (`ceSpread`, `peSpread`).
-   - Computes Order Book Depth Imbalance: `(Total Bid Qty - Total Ask Qty) / (Total Bid Qty + Total Ask Qty)`.
-   - Computes Directional Delta-Weighted OI Flow Imbalance across all strikes.
-2. True OHLC Technicals & Volatility Regimes:
-   - Calculates true 14-period ADX on actual 1m candle High/Low/Close.
-   - Calculates 14-period ATR (Average True Range) on Nifty spot.
-   - Tracks Opening Session Regime (9:15–9:30 IST) spot velocity ($V_t$) and retracement ($R_t$).
-   - India VIX Volatility Gating: Scales thresholds dynamically based on VIX levels (< 13: Complacent, 13–18: Normal, 18–24: Elevated, > 24: High Volatility).
-3. Dynamic Risk Management & State Machine:
-   - Computes dynamic Stop-Loss and Take-Profit prices using ATR multiples.
-   - Implements Trailing Stop mechanism when trade reaches 1.5x risk.
-   - Enforces whipsaw circuit breakers (blocks repeated false exits).
-
-#### Engine 3: Legacy Analysis (`src/scripts/legacy_analyze.ts`)
-1. Classic rule-based calculations without state machines:
-   - Standard PCR and strike clustering.
-   - Support and resistance based on 60% OI + 40% Chg OI weight.
-   - Simple sentiment score with fixed thresholds.
-
-### Step 6: Database Persistence & Snapshot Storage
-- **Postgres Inserts**:
-  - `prisma.trade.create`: V2 trade record.
-  - `prisma.v3VersionData.create`: V3 trade record.
-  - `prisma.legacyVersionData.create`: Legacy trade record.
-  - `prisma.dailyMinuteVolume.upsert`: Logs cumulative minute-level volume for R-Vol calculation.
-- **Postgres State Upserts**:
-  - Updates `active_state` (V2 state) and `active_state_v3` (V3 state) in `trade_state` table.
-- **Redis Snapshots**:
-  - Sets `pulse_ai:last_snapshot:${istDateStr}` with 24-hour TTL.
-  - Generates SVG charts via `plotter.util.ts` and caches base64 in Redis (`pulse_ai:chart:trading_plot`, `aggression_plot`, `max_pain_plot`).
-
-### Step 7: Real-Time Event Publishing
-Publishes lightweight JSON payloads over Redis Pub/Sub:
-- `pulse_ai:trades:new` (V2 record)
-- `pulse_ai:trades_v3:new` (V3 record)
-- `pulse_ai:trades_legacy:new` (Legacy record)
+### Step 7: Real-Time Broadcast
+1. Emits Redis Pub/Sub messages (`pulse_ai:trades:new`, `pulse_ai:trades_v3:new`, `pulse_ai:trades_legacy:new`).
+2. WebSocket server broadcasts events to all authenticated client connections.
 
 ---
 
-## 3. WebSocket Real-Time Distribution Workflow (`src/sockets/websocket.server.ts`)
+## 3. Frontend Client Architecture & Data Flow
 
-The WebSocket server runs alongside Express on `PORT_WS` (default 3001).
+Built with **Next.js 16 (App Router)**, **React 19**, and **Tailwind CSS**, the client application has been optimized for speed, modularity, and zero layout shift.
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Client as Frontend Client
-    participant HTTP as Express Server (Upgrade)
-    participant WSS as WebSocket Server
-    participant Redis as Redis Pub/Sub
-    participant Cron as Cron Worker
-
-    Client->>HTTP: GET /?token=<JWT_TOKEN> (Upgrade: websocket)
-    HTTP->>HTTP: Check connection capacity (Max 500)
-    HTTP->>HTTP: jwt.verify(token, AUTH_SECRET)
-    alt Invalid Token or > 500 clients
-        HTTP-->>Client: 401 Unauthorized or 503 Unavailable
-    else Valid Token
-        HTTP->>WSS: handleUpgrade(request, socket, head)
-        WSS-->>Client: 101 Switching Protocols
-        WSS-->>Client: { type: "welcome", message: "Connected..." }
-    end
-
-    loop Every 1 Second
-        WSS-->>Client: { type: "countdown:tick", data: { secondsRemaining: 60 - sec } }
-    end
-
-    Cron->>Redis: PUBLISH pulse_ai:trades_v3:new
-    Redis->>WSS: on("message", channel, msg)
-    WSS-->>Client: { type: "trade_v3:new", data: <V3Payload> }
-```
-
-1. **Authentication on Upgrade**:
-   - Clients must pass `?token=<JWT>` in the connection URL.
-   - Server verifies the JWT signature against `AUTH_SECRET`.
-   - Max 500 concurrent connections; excess connections receive `503 Service Unavailable`.
-2. **Channel Mapping**:
-   - `pulse_ai:trades:new` -> emits `trade:new` to WS clients.
-   - `pulse_ai:trades_v3:new` -> emits `trade_v3:new` to WS clients.
-   - `pulse_ai:trades_legacy:new` -> emits `trade_legacy:new` to WS clients.
-3. **Minute Boundary Countdown**:
-   - A 1-second `setInterval` loop calculates `secondsRemaining = 60 - now.getSeconds()`.
-   - Broadcasts `{ type: "countdown:tick", data: { secondsRemaining, timestamp } }` so the UI countdown progress bar stays perfectly synchronized across all devices.
-
----
-
-## 4. REST API Request Workflows
-
-### Authentication Flow (`/auth`)
-1. **POST `/auth/register`**:
-   - Body: `{ username, password, hp_website }`.
-   - Validates username (must be exactly 6 characters via Zod schema).
-   - Honeypot check: `hp_website` must be empty (blocks automated bot scrapers).
-   - Hashes password using `bcryptjs` (salt rounds = 10).
-   - Inserts into `users` table. Returns user metadata without password.
-2. **POST `/auth/login`**:
-   - Body: `{ username, password, hp_website }`.
-   - Validates user existence and checks bcrypt hash.
-   - Signs JWT containing `{ id, username }` valid for 7 days.
-   - Sets `pulse_token` HttpOnly, Secure cookie and returns JSON token.
-3. **POST `/auth/logout`**:
-   - Clears `pulse_token` cookie.
-
-### Multi-Engine Trades Retrieval (`/trades`)
-All endpoints are protected by `authenticateToken` middleware (checks Bearer token header or `pulse_token` cookie).
-1. **GET `/trades` (V2 Engine)**:
-   - Query: `?date=YYYY-MM-DD&since=<ID>&limit=400`.
-   - Returns array of serialized V2 records.
-2. **GET `/trades/v3` (V3 Engine)**:
-   - Query: `?date=YYYY-MM-DD&since=<ID>&limit=400`.
-   - Returns array of serialized V3 records with Greeks, spreads, depth imbalance.
-3. **GET `/trades/legacy` (Legacy Engine)**:
-   - Query: `?date=YYYY-MM-DD&since=<ID>&limit=400`.
-   - Returns array of serialized Legacy records.
-4. **GET `/trades/compare`**:
-   - Returns unified list matching timestamps across all 3 engines.
-5. **GET `/trades/compare/details?timestamp=...`**:
-   - Fetches the closest matching record from V2, V3, and Legacy within ±60 seconds.
-6. **GET `/trades/latest`**:
-   - Fetches the single latest record from `trades` (V2).
-7. **DELETE `/trades/:id`**:
-   - Deletes trade record by ID.
-
-### Charts Retrieval (`/charts/:name`)
-- Endpoint: `GET /charts/trading_plot`, `aggression_plot`, `max_pain_plot`.
-- Query: `?disable_spot=true&disable_pcr=true`.
-- If cached in Redis and query parameters are standard, serves cached PNG image buffer directly.
-- On cache miss or dynamic query flags, calls `ChartsService.renderAndCacheCharts` which runs `src/utils/plotter.util.ts` in-memory to generate standalone SVGs converted to PNG buffers.
-
-### Upstox OAuth Integration (`/auth/upstox`)
-1. **GET `/auth/upstox/login`**:
-   - Redirects the administrator to Upstox's official authorization dialog with `UPSTOX_CLIENT_ID` and redirect URI.
-2. **GET `/auth/upstox/callback?code=...`**:
-   - Exchanges auth code for API access token.
-   - Stores the active token in `UpstoxAuthService` for subsequent option chain calls.
-
----
-
-## 5. Frontend Client Lifecycle (`pulse_ai_frontend`)
-
-Built on **Next.js 16 (App Router)** and **React 19**, the frontend manages data flow through `app/page.tsx`.
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor User as Trader / User
-    participant Page as Next.js Dashboard (app/page.tsx)
+    actor Trader as Trader / User
+    participant App as Next.js Dashboard (app/page.tsx)
+    participant Auth as useAuth Hook
+    participant Feed as useMarketFeed Hook
+    participant History as useHistoryData Hook
     participant API as Backend REST API
     participant WS as WebSocket Server
 
-    User->>Page: Open Application (Browser, Electron, or Mobile)
-    Page->>Page: Check localStorage for pulse_token & pulse_username
+    Trader->>App: Open Application
+    App->>Auth: Check Auth State (localStorage / cookie)
     alt Not Logged In
-        Page-->>User: Render AuthForm (Login / Register)
+        Auth-->>App: isAuthenticated = false
+        App-->>Trader: Render AuthForm (Username/Password)
     else Authenticated
-        Page->>Page: Start Market Status Poller (every 15s)
-        par Fetch Initial History
-            Page->>API: GET /trades?limit=500&date=YYYY-MM-DD
-            Page->>API: GET /trades/v3?limit=500&date=YYYY-MM-DD
-            Page->>API: GET /trades/legacy?limit=500&date=YYYY-MM-DD
-        end
-        API-->>Page: Return Historical Datasets for 3 Engines
-        Page->>Page: Populate trades, v3Trades, legacyTrades state
-        Page->>Page: Set latestTrade = v3Trades[0]
-
-        Page->>WS: Connect WebSocket (ws://...?token=...)
-        WS-->>Page: Welcome Event
-        Page->>API: Gap Backfill: GET /trades/v3?since=lastTradeId
+        Auth-->>App: isAuthenticated = true, token
+        App->>Feed: Initialize Market Stream (token)
         
-        loop Real-Time Ingestion
-            WS-->>Page: trade_v3:new / trade:new / trade_legacy:new
-            Page->>Page: Prepend new tick, slice to 500 items max
-            Page->>Page: Re-render LiveEngineCard & UnifiedMultiEngineTable
-            WS-->>Page: countdown:tick
-            Page->>Page: Update circular countdown timer (60s -> 0s)
+        par Parallel Cold-Start
+            Feed->>API: GET /trades/v3?limit=500&date=today (Fast-Cache < 2ms)
+            Feed->>API: GET /trades?limit=500&date=today
+            Feed->>API: GET /trades/legacy?limit=500&date=today
+            Feed->>WS: Connect WebSocket (token)
+        end
+
+        API-->>Feed: Return Today's Buffered History
+        Feed-->>App: Update v3Trades, trades, legacyTrades, latestTrade
+        App-->>Trader: Transition from Skeletons to Live OverviewView (< 100ms)
+
+        WS-->>Feed: Welcome & Connection Established
+        Feed->>API: Gap Backfill: GET /trades/v3?since=lastTradeId
+
+        loop 1-Minute Live Broadcast
+            WS-->>Feed: trade_v3:new / trade:new / trade_legacy:new
+            Feed-->>App: Prepend new tick, slice to 500 max
+            App-->>Trader: LiveEngineCard & UnifiedMultiEngineTable update
+            WS-->>Feed: countdown:tick (secondsRemaining)
+            Feed-->>App: Update NavigationHeader Countdown
+        end
+
+        opt Manual DB Sync
+            Trader->>App: Click "Buffer: N Pending [Sync]"
+            App->>API: POST /trades/buffer/flush
+            API-->>App: 200 OK (N Rows Flushed to Postgres)
+            App-->>Trader: Show "✓ DB Synced"
+        end
+
+        opt Historical Date Lookup
+            Trader->>App: Switch to "History" Tab & Select Date
+            App->>History: setHistoryDate("YYYY-MM-DD")
+            History->>API: GET /trades?date=YYYY-MM-DD (Queries PostgreSQL)
+            API-->>History: Historical Trade Rows
+            History-->>App: Render HistoricalTradesTable
         end
     end
 ```
 
-### 1. Boot & Authentication State
-- Reads `localStorage.getItem("pulse_token")` and `pulse_username`.
-- If present, sets `isAuthenticated = true` and `token`.
-- If missing, displays `components/AuthForm.tsx`. Supports switching between Login and Register with instant error validation.
+### 1. State Isolation via Custom Hooks
+- **`hooks/useAuth.ts`**: Handles token persistence, login, registration with 6-character validation, and session termination.
+- **`hooks/useMarketFeed.ts`**: Manages the live WebSocket connection, auto-reconnection with backoff, gap backfilling, countdown ticks, and multi-engine live state arrays.
+- **`hooks/useHistoryData.ts`**: Manages calendar date selection, querying historical sessions from PostgreSQL, and log deletion.
+- **`hooks/useChartZoomPan.ts`**: Reusable hook handling mouse wheel zooming, mouse dragging/panning, SVG coordinate projections, zoom range slider, and fullscreen modal toggle.
 
-### 2. Market Status Loop
-- Function `checkMarketStatus` calculates IST time from UTC every 15 seconds.
-- Updates `marketOpen` boolean state (displayed on `NavigationHeader.tsx` with live indicator).
+### 2. Code-Splitting & Skeleton Screens
+- `app/page.tsx` is an orchestrator (~180 lines). Heavy views are dynamically imported with `next/dynamic`:
+  - `ChartsView`: Lazy-loaded with `<ChartSkeleton />`.
+  - `HistoryView`: Lazy-loaded with `<TableSkeleton rows={10} />`.
+  - `V3ExecutionFeedTable`: Lazy-loaded with `<TableSkeleton rows={8} />`.
+  - `LegacyExecutionFeedTable`: Lazy-loaded with `<TableSkeleton rows={8} />`.
+  - `TradeDetailsModal` and `SentimentModal`: Loaded on demand when requested.
+- Guarantees **Cumulative Layout Shift (CLS = 0)** and instant initial page load.
 
-### 3. Initial Multi-Engine History Fetch
-- On authenticated mount, fires parallel `Promise.all` calls:
-  - `api.trades.getV2All({ limit: 500, date: todayStr })`
-  - `api.trades.getV3All({ limit: 500, date: todayStr })`
-  - `api.trades.getLegacyAll({ limit: 500, date: todayStr })`
-- Sets `latestTrade` to the top record of `v3Trades`.
+### 3. Clean, Zero-Emoji UI Design
+- All informal emojis (`⚡`, `🏛️`, `📊`, `📁`, `📦`, `🎉`) have been eliminated.
+- Native, featherlight SVG icons (`components/common/Icons.tsx`) provide an institution-grade, distraction-free aesthetic.
+- Color theming is centralized in `lib/trade-utils.ts` via `getSignalTheme()`:
+  - Bullish: High-contrast emerald accents (`BUY CE`, `HOLD CE`).
+  - Bearish: High-contrast rose accents (`BUY PE`, `HOLD PE`).
+  - Exit: Purple accents (`EXIT`).
+  - Neutral: Zinc tones (`HOLD`, `Sideways`).
 
-### 4. WebSocket Subscription & Gap Backfilling
-- Connects to `process.env.NEXT_PUBLIC_WS_URL` with query parameter `?token=...`.
-- Tracks `lastTradeIdRef`. On connection or reconnection:
-  - Backfills missed trades via `api.trades.getV3All({ since: lastTradeIdRef.current })`.
-  - Merges, de-duplicates by ID, and prepends to state.
-- In case of disconnect, triggers an automatic reconnect attempt after a 5-second backoff timer.
-
-### 5. UI Component Hierarchy & Synchronization
-- **`NavigationHeader.tsx`**: Top navigation bar showing brand logo, live market status (Open/Closed), 60s countdown timer, engine selector, and user logout.
-- **`LiveEngineCard.tsx`**: Hero component displaying the latest actionable signal (`BUY CE`, `BUY PE`, `EXIT`, `HOLD`), conviction color cues, and summary breakdown.
-- **`KPIStatsCards.tsx`**: Displays instant snapshot metrics: Spot Price, PCR, Max Pain, Support, Resistance, IV Skew, RSI, ADX, Straddle Cost.
-- **`UnifiedMultiEngineTable.tsx`**: Aggregates ticks from V3, V2, and Legacy by rounding timestamps to minute boundaries (`YYYY-MM-DDTHH:mm:00`), displaying synchronized rows across all 3 engines.
-- **`TradeComparisonColumn.tsx`**: The 4th column in the table layout. Clicking any row pins that minute tick and compares V3, V2, and Legacy side-by-side with divergence alerts.
-- **`InteractiveTradingChart.tsx`**: Native SVG charting component with spot price line, PCR overlay, buy/sell marker badges, zoom/pan sliders, and fullscreen toggle.
-- **`HistoricalTradesTable.tsx`**: Historical tab allowing the user to select any previous date via date picker and inspect the full session execution log.
+### 4. Real-Time Buffer Status & Manual Sync
+- `NavigationHeader.tsx` polls `GET /trades/buffer/status` every 20s and on every minute boundary tick.
+- Displays buffer state:
+  - `Buffer: N Pending [Sync]`: Indicates uncommitted memory ticks. Clicking triggers an immediate batch flush to PostgreSQL.
+  - `✓ DB Synced`: Confirms all ticks are persisted to PostgreSQL.
 
 ---
 
-## 6. Multi-Platform Distribution Workflow
+## 4. Multi-Platform Distribution Workflow
 
-The frontend is structured to deploy to three distinct form factors from a single codebase:
-1. **Web (Next.js)**: Runs on browser via standard Next.js build (`npm run dev` or `npm run build`).
-2. **Desktop (Electron)**: Driven by `main-electron.js`, packages the Next.js bundle into a native cross-platform desktop window (`npm run electron`).
-3. **Mobile (Capacitor / Android)**: Configured in `capacitor.config.json` with App ID `com.pulseai.app`, builds native WebView packaging for Android APK/AAB distribution.
+The frontend code builds into three production distributions:
+1. **Web (Next.js)**: Runs on browser via Turbopack build (`npm run build` -> `next start`).
+2. **Desktop (Electron)**: Packaged via `main-electron.js` into cross-platform desktop installers (`npm run electron`).
+3. **Mobile (Capacitor / Android)**: Configured in `capacitor.config.json` with App ID `com.pulseai.app`, builds native Android APK packages.
