@@ -3,10 +3,18 @@
 import { useState, useEffect, useCallback } from "react";
 import { Trade } from "../types";
 import { api } from "../lib/api";
-import { getYesterdayISTDateString } from "../lib/trade-utils";
+
+const getYesterdayString = () => {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
 
 export function useHistoryData(isAuthenticated: boolean, token: string, activeTab: string) {
-  const [historyDate, setHistoryDate] = useState<string>(() => getYesterdayISTDateString());
+  const [historyDate, setHistoryDate] = useState<string>(() => getYesterdayString());
   const [historyTrades, setHistoryTrades] = useState<Trade[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [selectedHistoryTrade, setSelectedHistoryTrade] = useState<Trade | null>(null);
@@ -53,6 +61,6 @@ export function useHistoryData(isAuthenticated: boolean, token: string, activeTa
     selectedHistoryTrade,
     setSelectedHistoryTrade,
     handleDeleteHistoryTrade,
-    getYesterdayString: getYesterdayISTDateString,
+    getYesterdayString,
   };
 }
