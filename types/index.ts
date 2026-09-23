@@ -64,3 +64,36 @@ export interface LegacyTrade {
   signal: string;
   summary: string;
 }
+
+export interface MarketSessionStatus {
+  isOpen: boolean;
+  isCoolDown: boolean;
+  inUptimeWindow: boolean;
+  manualSessionActive: boolean;
+  reason: "active_trading" | "weekend" | "holiday" | "pre_market" | "post_market" | "manual_session";
+  holidayName?: string;
+  istDate: string;
+  istTime: string;
+  tradingHours: string;
+  uptimeSchedule: string;
+  manualSessionExpiresAt?: string | null;
+}
+
+export interface MarketStatusResponse {
+  status: string;
+  timestamp: string;
+  response_time_ms: number;
+  market_status: MarketSessionStatus;
+  services?: Record<string, any>;
+}
+
+export interface MarketWakeResponse {
+  status: "awake" | "standby";
+  message: string;
+  session?: {
+    expiresAt: string;
+    durationMinutes: number;
+  };
+  market_status: MarketSessionStatus;
+}
+

@@ -78,4 +78,24 @@ export const api = {
       return data as { message: string; result: { flushedV2: number; flushedV3: number; flushedLegacy: number; flushedVolume: number } };
     },
   },
+  market: {
+    getStatus: async () => {
+      const { data } = await apiClient.get("/api/market/status", { timeout: 10000 });
+      return data;
+    },
+    wake: async (durationMinutes: number = 30) => {
+      // 60-second timeout to accommodate Render cold start
+      const { data } = await apiClient.post("/api/market/wake", { durationMinutes }, { timeout: 60000 });
+      return data;
+    },
+    sleep: async () => {
+      const { data } = await apiClient.post("/api/market/sleep", {}, { timeout: 10000 });
+      return data;
+    },
+    getHolidays: async () => {
+      const { data } = await apiClient.get("/api/market/holidays", { timeout: 10000 });
+      return data;
+    },
+  },
 };
+

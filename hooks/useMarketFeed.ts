@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Trade, V3VersionTrade, LegacyTrade } from "../types";
+import { Trade, V3VersionTrade, LegacyTrade, MarketSessionStatus } from "../types";
 import { api } from "../lib/api";
 import { getISTNow, getTodayISTDateString } from "../lib/trade-utils";
 
@@ -16,84 +16,81 @@ export function useMarketFeed(isAuthenticated: boolean, token: string) {
   const [marketOpen, setMarketOpen] = useState(false);
   const [countdown, setCountdown] = useState(60);
 
+  // Render Uptime & On-Demand Wake State
+  const [isWaking, setIsWaking] = useState(false);
+  const [wakeProgress, setWakeProgress] = useState(0);
+  const [isManualSession, setIsManualSession] = useState(false);
+  const [marketStatus, setMarketStatus] = useState<MarketSessionStatus | null>(null);
+
   const socketRef = useRef<WebSocket | null>(null);
   const lastTradeIdRef = useRef<number | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Market status calculation (Mon-Fri 09:15 - 15:30 IST)
-  const checkMarketStatus = useCallback(() => {
+  // Market status calculation (Mon-Fri 09:15 - 15:30 IST) + Server Sync
+  const checkMarketStatus = useCallback(async () => {
     const ist = getISTNow();
     const day = ist.getDay(); // 0 = Sun, 6 = Sat
-    if (day === 0 || day === 6) {
-      setMarketOpen(false);
-      return;
+    const timeNum = ist.getHours() * 100 + ist.getMinutes();
+    const isLiveMarketTime = day >= 1 && day <= 5 && timeNum >= 915 && timeNum <= 1530;
+
+    // Check with backend for authoritative status if connected or in manual session
+    try {
+      const data = await api.market.getStatus();
+      if (data?.market_status) {
+        setMarketStatus(data.market_status);
+        setMarketOpen(data.market_status.isOpen);
+        if (data.market_status.manualSessionActive) {
+          setIsManualSession(true);
+        }
+        return;
+      }
+    } catch {
+      // Fallback to client-side IST calculation if backend is asleep
     }
 
-    const timeNum = ist.getHours() * 100 + ist.getMinutes();
-    setMarketOpen(timeNum >= 915 && timeNum <= 1530);
+    setMarketOpen(isLiveMarketTime);
   }, []);
 
   useEffect(() => {
     checkMarketStatus();
-    const interval = setInterval(checkMarketStatus, 15000);
+    const interval = setInterval(checkMarketStatus, 20000);
     return () => clearInterval(interval);
   }, [checkMarketStatus]);
 
-  // Initial Multi-Engine History Fetch
-  useEffect(() => {
-    if (!isAuthenticated || !token) return;
+  // Fetch Multi-Engine Trade Data
+  const fetchHistory = useCallback(async () => {
+    try {
+      const todayStr = getTodayISTDateString();
 
-    let isMounted = true;
-    setIsLoading(true);
+      let [data, v3Data, legacyData] = await Promise.all([
+        api.trades.getV2All({ limit: 500, date: todayStr }),
+        api.trades.getV3All({ limit: 500, date: todayStr }),
+        api.trades.getLegacyAll({ limit: 500, date: todayStr }),
+      ]);
 
-    const fetchHistory = async () => {
-      try {
-        const todayStr = getTodayISTDateString();
+      if (data.length === 0) data = await api.trades.getV2All({ limit: 500 });
+      if (v3Data.length === 0) v3Data = await api.trades.getV3All({ limit: 500 });
+      if (legacyData.length === 0) legacyData = await api.trades.getLegacyAll({ limit: 500 });
 
-        let [data, v3Data, legacyData] = await Promise.all([
-          api.trades.getV2All({ limit: 500, date: todayStr }),
-          api.trades.getV3All({ limit: 500, date: todayStr }),
-          api.trades.getLegacyAll({ limit: 500, date: todayStr }),
-        ]);
+      setTrades(data);
+      setV3Trades(v3Data);
+      setLegacyTrades(legacyData);
 
-        if (data.length === 0) data = await api.trades.getV2All({ limit: 500 });
-        if (v3Data.length === 0) v3Data = await api.trades.getV3All({ limit: 500 });
-        if (legacyData.length === 0) legacyData = await api.trades.getLegacyAll({ limit: 500 });
-
-        if (!isMounted) return;
-
-        setTrades(data);
-        setV3Trades(v3Data);
-        setLegacyTrades(legacyData);
-
-        if (v3Data.length > 0) {
-          setLatestTrade(v3Data[0]);
-          lastTradeIdRef.current = v3Data[0].id;
-        } else if (data.length > 0) {
-          lastTradeIdRef.current = data[0].id;
-        }
-      } catch (err) {
-        console.error("Failed to fetch multi-engine trade history:", err);
-      } finally {
-        if (isMounted) setIsLoading(false);
+      if (v3Data.length > 0) {
+        setLatestTrade(v3Data[0]);
+        lastTradeIdRef.current = v3Data[0].id;
+      } else if (data.length > 0) {
+        lastTradeIdRef.current = data[0].id;
       }
-    };
+    } catch (err) {
+      console.error("Failed to fetch multi-engine trade history:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
-    fetchHistory();
-    connectWebSocket();
-
-    return () => {
-      isMounted = false;
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-        reconnectTimeoutRef.current = null;
-      }
-      if (socketRef.current) {
-        socketRef.current.close();
-      }
-    };
-  }, [isAuthenticated, token]);
-
+  // WebSocket Connection
   const connectWebSocket = useCallback(() => {
     if (!token) return;
     if (socketRef.current && (socketRef.current.readyState === WebSocket.OPEN || socketRef.current.readyState === WebSocket.CONNECTING)) {
@@ -160,18 +157,114 @@ export function useMarketFeed(isAuthenticated: boolean, token: string) {
 
     ws.onclose = () => {
       setConnectionStatus("disconnected");
-      if (!reconnectTimeoutRef.current) {
-        reconnectTimeoutRef.current = setTimeout(() => {
-          reconnectTimeoutRef.current = null;
-          connectWebSocket();
-        }, 5000);
+      // Only auto-reconnect continuously if live market is open or manual session is active
+      const ist = getISTNow();
+      const day = ist.getDay();
+      const timeNum = ist.getHours() * 100 + ist.getMinutes();
+      const isLiveTime = day >= 1 && day <= 5 && timeNum >= 915 && timeNum <= 1530;
+
+      if (isLiveTime || isManualSession) {
+        if (!reconnectTimeoutRef.current) {
+          reconnectTimeoutRef.current = setTimeout(() => {
+            reconnectTimeoutRef.current = null;
+            connectWebSocket();
+          }, 5000);
+        }
       }
     };
 
     ws.onerror = () => {
       // ws error logged
     };
-  }, [token]);
+  }, [token, isManualSession]);
+
+  // Initial load
+  useEffect(() => {
+    if (!isAuthenticated || !token) return;
+
+    fetchHistory();
+    connectWebSocket();
+
+    return () => {
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
+      if (socketRef.current) {
+        socketRef.current.close();
+      }
+    };
+  }, [isAuthenticated, token, fetchHistory, connectWebSocket]);
+
+  // Client-Side Tab Heartbeat during Manual Session to keep Render awake
+  useEffect(() => {
+    if (!isManualSession) {
+      if (heartbeatIntervalRef.current) {
+        clearInterval(heartbeatIntervalRef.current);
+        heartbeatIntervalRef.current = null;
+      }
+      return;
+    }
+
+    // Ping /api/market/wake every 4 minutes while tab is open
+    heartbeatIntervalRef.current = setInterval(async () => {
+      if (typeof document !== "undefined" && !document.hidden) {
+        try {
+          await api.market.wake(30);
+        } catch {
+          // Ignore heartbeat error
+        }
+      }
+    }, 4 * 60 * 1000);
+
+    return () => {
+      if (heartbeatIntervalRef.current) {
+        clearInterval(heartbeatIntervalRef.current);
+        heartbeatIntervalRef.current = null;
+      }
+    };
+  }, [isManualSession]);
+
+  // Wake Backend Action
+  const wakeBackend = useCallback(async () => {
+    if (isWaking) return;
+    setIsWaking(true);
+    setWakeProgress(0);
+
+    const progressTimer = setInterval(() => {
+      setWakeProgress((prev) => prev + 1);
+    }, 1000);
+
+    try {
+      const res = await api.market.wake(30);
+      setIsManualSession(true);
+      if (res?.market_status) {
+        setMarketStatus(res.market_status);
+      }
+      // Load latest data and reconnect WebSocket
+      await fetchHistory();
+      connectWebSocket();
+    } catch (err: any) {
+      console.error("Failed to wake backend:", err);
+      alert("Failed to wake server. Render may still be spinning up, please retry in a few seconds.");
+    } finally {
+      clearInterval(progressTimer);
+      setIsWaking(false);
+    }
+  }, [isWaking, fetchHistory, connectWebSocket]);
+
+  // Disconnect Backend / Put Server in Standby
+  const disconnectBackend = useCallback(async () => {
+    try {
+      await api.market.sleep();
+    } catch {}
+    setIsManualSession(false);
+    if (socketRef.current) {
+      socketRef.current.close();
+    }
+    setConnectionStatus("disconnected");
+    checkMarketStatus();
+  }, [checkMarketStatus]);
 
   const handleDeleteTrade = async (id: number) => {
     if (!token) return;
@@ -205,5 +298,11 @@ export function useMarketFeed(isAuthenticated: boolean, token: string) {
     marketOpen,
     countdown,
     handleDeleteTrade,
+    isWaking,
+    wakeProgress,
+    isManualSession,
+    marketStatus,
+    wakeBackend,
+    disconnectBackend,
   };
 }

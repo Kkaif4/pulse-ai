@@ -68,6 +68,11 @@ export default function Dashboard() {
     marketOpen,
     countdown,
     handleDeleteTrade,
+    isWaking,
+    wakeProgress,
+    isManualSession,
+    wakeBackend,
+    disconnectBackend,
   } = useMarketFeed(isAuthenticated, token);
 
   // 3. Historical Date-Lookup State
@@ -117,6 +122,11 @@ export default function Dashboard() {
         onLogout={handleLogout}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
+        isWaking={isWaking}
+        wakeProgress={wakeProgress}
+        isManualSession={isManualSession}
+        onWakeBackend={wakeBackend}
+        onDisconnectBackend={disconnectBackend}
       />
 
       <main className="mx-auto max-w-[1600px] px-4 pb-8 sm:px-6">

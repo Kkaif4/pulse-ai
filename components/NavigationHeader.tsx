@@ -13,6 +13,11 @@ interface NavigationHeaderProps {
   onLogout: () => void;
   activeTab: "overview" | "charts" | "v3_engine" | "legacy_engine" | "history";
   setActiveTab: (tab: "overview" | "charts" | "v3_engine" | "legacy_engine" | "history") => void;
+  isWaking?: boolean;
+  wakeProgress?: number;
+  isManualSession?: boolean;
+  onWakeBackend?: () => void;
+  onDisconnectBackend?: () => void;
 }
 
 export function NavigationHeader({
@@ -23,6 +28,11 @@ export function NavigationHeader({
   onLogout,
   activeTab,
   setActiveTab,
+  isWaking = false,
+  wakeProgress = 0,
+  isManualSession = false,
+  onWakeBackend,
+  onDisconnectBackend,
 }: NavigationHeaderProps) {
   const [pendingCount, setPendingCount] = useState<number | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -94,12 +104,16 @@ export function NavigationHeader({
                 className={`h-2.5 w-2.5 rounded-full ${
                   connectionStatus === "connected"
                     ? "bg-emerald-500 animate-pulse"
-                    : connectionStatus === "connecting"
-                      ? "bg-amber-500"
+                    : connectionStatus === "connecting" || isWaking
+                      ? "bg-amber-500 animate-ping"
                       : "bg-rose-500"
                 }`}
               />
-              <span className="capitalize text-zinc-400">{connectionStatus}</span>
+              <span className="capitalize text-zinc-400">
+                {connectionStatus === "connected" && isManualSession
+                  ? "Connected (Manual Session)"
+                  : connectionStatus}
+              </span>
             </div>
 
             {/* Market Status Badge */}
@@ -107,12 +121,80 @@ export function NavigationHeader({
               className={`flex items-center gap-2 rounded-full px-3 py-1 text-xs border transition-all duration-300 ${
                 marketOpen
                   ? "bg-cyan-500/10 text-cyan-400 border-cyan-500/20"
-                  : "bg-rose-500/10 text-rose-400 border-rose-500/25 animate-pulse"
+                  : isManualSession
+                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                    : "bg-rose-500/10 text-rose-400 border-rose-500/25"
               }`}
             >
-              <span className={`h-2 w-2 rounded-full ${marketOpen ? "bg-cyan-500 animate-pulse" : "bg-rose-500"}`} />
-              <span className="font-bold">{marketOpen ? "Market Open" : "Market Closed"}</span>
+              <span
+                className={`h-2 w-2 rounded-full ${
+                  marketOpen
+                    ? "bg-cyan-500 animate-pulse"
+                    : isManualSession
+                      ? "bg-emerald-500 animate-pulse"
+                      : "bg-rose-500"
+                }`}
+              />
+              <span className="font-bold">
+                {marketOpen
+                  ? "Market Open"
+                  : isManualSession
+                    ? "Off-Hours Active"
+                    : "Market Closed"}
+              </span>
             </div>
+
+            {/* Render 8 AM - 4 PM Uptime Schedule Indicator */}
+            {!marketOpen && (
+              <div
+                title="Render Server Schedule: Server runs automatically during trading hours (8:00 AM - 4:00 PM IST, Mon-Fri). Outside this window, server sleeps to conserve Render hours."
+                className="hidden md:flex items-center gap-1.5 rounded-full border border-zinc-800 bg-zinc-900/60 px-2.5 py-1 text-[11px] text-zinc-400 font-mono"
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-cyan-400/70" />
+                <span>Uptime: 8 AM - 4 PM IST</span>
+              </div>
+            )}
+
+            {/* On-Demand Connect / Wake Backend Button (when disconnected or waking) */}
+            {connectionStatus !== "connected" && onWakeBackend && (
+              <button
+                onClick={onWakeBackend}
+                disabled={isWaking}
+                title="Activate Render Server: Sends an HTTP wake probe to boot the container from sleep (~25-35s cold start) and creates a 30-minute active session."
+                className={`flex items-center gap-2 rounded-full px-3.5 py-1 text-xs font-semibold border transition-all shadow-sm ${
+                  isWaking
+                    ? "border-amber-500/50 bg-amber-500/15 text-amber-300 animate-pulse cursor-wait"
+                    : "border-cyan-500/40 bg-gradient-to-r from-cyan-500/20 to-blue-500/20 text-cyan-300 hover:from-cyan-500/30 hover:to-blue-500/30 hover:border-cyan-400 cursor-pointer"
+                }`}
+              >
+                {isWaking ? (
+                  <>
+                    <svg className="h-3 w-3 animate-spin text-amber-300" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    <span>Waking Server ({wakeProgress}s)...</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-sm leading-none">⚡</span>
+                    <span>Connect Backend</span>
+                  </>
+                )}
+              </button>
+            )}
+
+            {/* Sleep Server Button (when in manual active session during off-hours) */}
+            {connectionStatus === "connected" && isManualSession && !marketOpen && onDisconnectBackend && (
+              <button
+                onClick={onDisconnectBackend}
+                title="Disconnect & Allow Sleep: Ends the manual session so Render can spin down to conserve compute hours."
+                className="flex items-center gap-1.5 rounded-full border border-zinc-700/60 bg-zinc-800/60 px-2.5 py-1 text-xs text-zinc-300 hover:bg-rose-500/20 hover:border-rose-500/40 hover:text-rose-300 transition-all cursor-pointer"
+              >
+                <span>🌙</span>
+                <span>Sleep Server</span>
+              </button>
+            )}
 
             {/* Countdown Badge - Only displayed when market is open */}
             {marketOpen && (
