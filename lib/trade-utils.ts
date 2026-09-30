@@ -109,12 +109,24 @@ export function getYesterdayISTDateString(): string {
 }
 
 /**
- * Formats a timestamp into HH:MM:SS or HH:MM string in IST.
+ * Returns YYYY-MM-DD string for any given date in IST (Asia/Kolkata).
+ */
+export function getISTDateString(date: Date | string): string {
+  if (!date) return "";
+  const d = typeof date === "string" ? new Date(date) : date;
+  if (isNaN(d.getTime())) return "";
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(d);
+}
+
+/**
+ * Formats a timestamp into HH:MM:SS or HH:MM string in IST (Asia/Kolkata).
  */
 export function formatTime(timestamp: string | Date, includeSeconds: boolean = false): string {
   if (!timestamp) return "N/A";
-  const d = new Date(timestamp);
-  return d.toLocaleTimeString([], {
+  const d = typeof timestamp === "string" ? new Date(timestamp) : timestamp;
+  if (isNaN(d.getTime())) return "N/A";
+  return d.toLocaleTimeString("en-GB", {
+    timeZone: "Asia/Kolkata",
     hour: "2-digit",
     minute: "2-digit",
     second: includeSeconds ? "2-digit" : undefined,
