@@ -11,8 +11,22 @@ interface NavigationHeaderProps {
   countdown: number;
   username: string;
   onLogout: () => void;
-  activeTab: "overview" | "charts" | "v3_engine" | "legacy_engine" | "history";
-  setActiveTab: (tab: "overview" | "charts" | "v3_engine" | "legacy_engine" | "history") => void;
+  activeTab:
+    | "overview"
+    | "charts"
+    | "v3_engine"
+    | "legacy_engine"
+    | "history"
+    | "v4_intelligence";
+  setActiveTab: (
+    tab:
+      | "overview"
+      | "charts"
+      | "v3_engine"
+      | "legacy_engine"
+      | "history"
+      | "v4_intelligence",
+  ) => void;
   isWaking?: boolean;
   wakeProgress?: number;
   isManualSession?: boolean;
@@ -169,9 +183,24 @@ export function NavigationHeader({
               >
                 {isWaking ? (
                   <>
-                    <svg className="h-3 w-3 animate-spin text-amber-300" viewBox="0 0 24 24" fill="none">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    <svg
+                      className="h-3 w-3 animate-spin text-amber-300"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      />
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                      />
                     </svg>
                     <span>Waking Server ({wakeProgress}s)...</span>
                   </>
@@ -185,22 +214,27 @@ export function NavigationHeader({
             )}
 
             {/* Sleep Server Button (when in manual active session during off-hours) */}
-            {connectionStatus === "connected" && isManualSession && !marketOpen && onDisconnectBackend && (
-              <button
-                onClick={onDisconnectBackend}
-                title="Disconnect & Allow Sleep: Ends the manual session so Render can spin down to conserve compute hours."
-                className="flex items-center gap-1.5 rounded-full border border-zinc-700/60 bg-zinc-800/60 px-2.5 py-1 text-xs text-zinc-300 hover:bg-rose-500/20 hover:border-rose-500/40 hover:text-rose-300 transition-all cursor-pointer"
-              >
-                <span>🌙</span>
-                <span>Sleep Server</span>
-              </button>
-            )}
+            {connectionStatus === "connected" &&
+              isManualSession &&
+              !marketOpen &&
+              onDisconnectBackend && (
+                <button
+                  onClick={onDisconnectBackend}
+                  title="Disconnect & Allow Sleep: Ends the manual session so Render can spin down to conserve compute hours."
+                  className="flex items-center gap-1.5 rounded-full border border-zinc-700/60 bg-zinc-800/60 px-2.5 py-1 text-xs text-zinc-300 hover:bg-rose-500/20 hover:border-rose-500/40 hover:text-rose-300 transition-all cursor-pointer"
+                >
+                  <span>🌙</span>
+                  <span>Sleep Server</span>
+                </button>
+              )}
 
             {/* Countdown Badge - Only displayed when market is open */}
             {marketOpen && (
               <div
                 className={`flex items-center gap-2 rounded-full px-3 py-1 text-xs border bg-zinc-900/60 ${
-                  countdown === 0 ? "border-amber-500/30 text-amber-400" : "border-zinc-800 text-zinc-400"
+                  countdown === 0
+                    ? "border-amber-500/30 text-amber-400"
+                    : "border-zinc-800 text-zinc-400"
                 }`}
               >
                 <span className="font-mono font-semibold">
@@ -254,7 +288,9 @@ export function NavigationHeader({
           </div>
 
           <div className="flex items-center gap-4">
-            <span className="text-sm font-semibold text-zinc-400">@{username}</span>
+            <span className="text-sm font-semibold text-zinc-400">
+              @{username}
+            </span>
             <button
               onClick={onLogout}
               className="rounded-lg border border-zinc-800 bg-zinc-900/50 px-3 py-1.5 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
@@ -271,7 +307,9 @@ export function NavigationHeader({
           <button
             onClick={() => setActiveTab("overview")}
             className={`border-b-2 px-6 py-3 font-semibold text-sm whitespace-nowrap transition-colors ${
-              activeTab === "overview" ? "border-cyan-500 text-white font-bold" : "border-transparent text-zinc-500 hover:text-zinc-300"
+              activeTab === "overview"
+                ? "border-cyan-500 text-white font-bold"
+                : "border-transparent text-zinc-500 hover:text-zinc-300"
             }`}
           >
             Multi-Engine Workspace
@@ -279,7 +317,9 @@ export function NavigationHeader({
           <button
             onClick={() => setActiveTab("charts")}
             className={`border-b-2 px-6 py-3 font-semibold text-sm whitespace-nowrap transition-colors ${
-              activeTab === "charts" ? "border-cyan-500 text-white font-bold" : "border-transparent text-zinc-500 hover:text-zinc-300"
+              activeTab === "charts"
+                ? "border-cyan-500 text-white font-bold"
+                : "border-transparent text-zinc-500 hover:text-zinc-300"
             }`}
           >
             Interactive Charts
@@ -287,7 +327,9 @@ export function NavigationHeader({
           <button
             onClick={() => setActiveTab("v3_engine")}
             className={`border-b-2 px-6 py-3 font-semibold text-sm whitespace-nowrap flex items-center gap-2 transition-colors ${
-              activeTab === "v3_engine" ? "border-emerald-500 text-emerald-400 font-bold" : "border-transparent text-zinc-500 hover:text-emerald-300"
+              activeTab === "v3_engine"
+                ? "border-emerald-500 text-emerald-400 font-bold"
+                : "border-transparent text-zinc-500 hover:text-emerald-300"
             }`}
           >
             <span>V3 Engine</span>
@@ -295,7 +337,9 @@ export function NavigationHeader({
           <button
             onClick={() => setActiveTab("legacy_engine")}
             className={`border-b-2 px-6 py-3 font-semibold text-sm whitespace-nowrap flex items-center gap-2 transition-colors ${
-              activeTab === "legacy_engine" ? "border-purple-500 text-purple-400 font-bold" : "border-transparent text-zinc-500 hover:text-purple-300"
+              activeTab === "legacy_engine"
+                ? "border-purple-500 text-purple-400 font-bold"
+                : "border-transparent text-zinc-500 hover:text-purple-300"
             }`}
           >
             <span>Legacy Engine</span>
@@ -303,10 +347,28 @@ export function NavigationHeader({
           <button
             onClick={() => setActiveTab("history")}
             className={`border-b-2 px-6 py-3 font-semibold text-sm whitespace-nowrap transition-colors ${
-              activeTab === "history" ? "border-cyan-500 text-white font-bold" : "border-transparent text-zinc-500 hover:text-zinc-300"
+              activeTab === "history"
+                ? "border-cyan-500 text-white font-bold"
+                : "border-transparent text-zinc-500 hover:text-zinc-300"
             }`}
           >
             History
+          </button>
+          <div className="flex-1"></div>
+          <button
+            onClick={() => setActiveTab("v4_intelligence")}
+            className={`border-b-2 px-6 py-3 font-semibold text-sm whitespace-nowrap transition-colors ${
+              activeTab === "v4_intelligence"
+                ? "border-amber-500 text-amber-400 font-bold"
+                : "border-transparent text-zinc-500 hover:text-amber-300"
+            }`}
+          >
+            <span className="flex items-center gap-2">
+              <span className="bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded text-[10px] uppercase font-bold border border-amber-500/30">
+                V4
+              </span>
+              Market Intelligence
+            </span>
           </button>
         </div>
       </div>

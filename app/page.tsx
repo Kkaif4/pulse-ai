@@ -13,34 +13,57 @@ import { useHistoryData } from "@/hooks/useHistoryData";
 // Code-Split Heavy Views via next/dynamic with Skeleton Fallbacks
 const ChartsView = dynamic(
   () => import("@/components/views/ChartsView").then((mod) => mod.ChartsView),
-  { loading: () => <ChartSkeleton /> }
+  { loading: () => <ChartSkeleton /> },
 );
 
 const HistoryView = dynamic(
   () => import("@/components/views/HistoryView").then((mod) => mod.HistoryView),
-  { loading: () => <TableSkeleton rows={10} /> }
+  { loading: () => <TableSkeleton rows={10} /> },
 );
 
 const V3ExecutionFeedTable = dynamic(
-  () => import("@/components/V3ExecutionFeedTable").then((mod) => mod.V3ExecutionFeedTable),
-  { loading: () => <TableSkeleton rows={8} /> }
+  () =>
+    import("@/components/V3ExecutionFeedTable").then(
+      (mod) => mod.V3ExecutionFeedTable,
+    ),
+  { loading: () => <TableSkeleton rows={8} /> },
 );
 
 const LegacyExecutionFeedTable = dynamic(
-  () => import("@/components/LegacyExecutionFeedTable").then((mod) => mod.LegacyExecutionFeedTable),
-  { loading: () => <TableSkeleton rows={8} /> }
+  () =>
+    import("@/components/LegacyExecutionFeedTable").then(
+      (mod) => mod.LegacyExecutionFeedTable,
+    ),
+  { loading: () => <TableSkeleton rows={8} /> },
 );
 
-const TradeDetailsModal = dynamic(
-  () => import("@/components/TradeDetailsModal").then((mod) => mod.TradeDetailsModal)
+const TradeDetailsModal = dynamic(() =>
+  import("@/components/TradeDetailsModal").then((mod) => mod.TradeDetailsModal),
 );
 
-const SentimentModal = dynamic(
-  () => import("@/components/modals/SentimentModal").then((mod) => mod.SentimentModal)
+const SentimentModal = dynamic(() =>
+  import("@/components/modals/SentimentModal").then(
+    (mod) => mod.SentimentModal,
+  ),
+);
+
+const V4WorkspaceView = dynamic(
+  () =>
+    import("@/components/views/V4WorkspaceView").then(
+      (mod) => mod.V4WorkspaceView,
+    ),
+  { loading: () => <TableSkeleton rows={10} /> },
 );
 
 export default function Dashboard() {
-  const [activeTab, setActiveTab] = useState<"overview" | "charts" | "v3_engine" | "legacy_engine" | "history">("overview");
+  const [activeTab, setActiveTab] = useState<
+    | "overview"
+    | "charts"
+    | "v3_engine"
+    | "legacy_engine"
+    | "history"
+    | "v4_intelligence"
+  >("overview");
 
   // 1. Authentication State
   const {
@@ -88,8 +111,12 @@ export default function Dashboard() {
   } = useHistoryData(isAuthenticated, token, activeTab);
 
   // 4. Multi-Engine 4th Column Selection State
-  const [selectedTimestamp, setSelectedTimestamp] = useState<string | null>(null);
-  const [selectedSentimentTrade, setSelectedSentimentTrade] = useState<any | null>(null);
+  const [selectedTimestamp, setSelectedTimestamp] = useState<string | null>(
+    null,
+  );
+  const [selectedSentimentTrade, setSelectedSentimentTrade] = useState<
+    any | null
+  >(null);
 
   const handleSelectTradeForComparison = (timestamp: string) => {
     setSelectedTimestamp(timestamp);
@@ -181,6 +208,9 @@ export default function Dashboard() {
               onDeleteTrade={handleDeleteHistoryTrade}
             />
           )}
+
+          {/* Tab 6: V4 Market Intelligence Workspace */}
+          {activeTab === "v4_intelligence" && <V4WorkspaceView />}
         </div>
       </main>
 
