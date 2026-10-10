@@ -95,9 +95,9 @@ export function NavigationHeader({
 
   return (
     <>
-      <header className="border-b border-zinc-900 bg-zinc-900/30 px-6 py-4 backdrop-blur-md">
-        <div className="mx-auto flex max-w-[1600px] items-center justify-between">
-          <div className="flex items-center gap-4 flex-wrap">
+      <header className="border-b border-zinc-900 bg-zinc-900/30 px-4 py-4 sm:px-6 backdrop-blur-md">
+        <div className="mx-auto flex max-w-[1600px] flex-col md:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-4 flex-wrap justify-center md:justify-start">
             <div className="flex items-center gap-2.5">
               <Image
                 src="/favicon-32x32.png"
@@ -303,7 +303,7 @@ export function NavigationHeader({
 
       {/* Navigation Tabs */}
       <div className="mx-auto max-w-[1600px] px-4 pt-4 sm:px-6">
-        <div className="flex border-b border-zinc-900 overflow-x-auto">
+        <div className="flex border-b border-zinc-900 overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
           <button
             onClick={() => setActiveTab("overview")}
             className={`border-b-2 px-6 py-3 font-semibold text-sm whitespace-nowrap transition-colors ${
@@ -354,10 +354,9 @@ export function NavigationHeader({
           >
             History
           </button>
-          <div className="flex-1"></div>
           <button
             onClick={() => setActiveTab("v4_intelligence")}
-            className={`border-b-2 px-6 py-3 font-semibold text-sm whitespace-nowrap transition-colors ${
+            className={`md:ml-auto border-b-2 px-6 py-3 font-semibold text-sm whitespace-nowrap transition-colors ${
               activeTab === "v4_intelligence"
                 ? "border-amber-500 text-amber-400 font-bold"
                 : "border-transparent text-zinc-500 hover:text-amber-300"
