@@ -24,6 +24,33 @@ apiClient.interceptors.request.use(
   }
 );
 
+// Automatically detect expired or invalid tokens and clear stale credentials
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+      const url = error.config?.url || "";
+      // If it's not the initial login or register attempt
+      if (!url.includes("/auth/login") && !url.includes("/auth/register")) {
+        if (typeof window !== "undefined") {
+          localStorage.removeItem("pulse_token");
+          localStorage.removeItem("pulse_username");
+          window.dispatchEvent(
+            new CustomEvent("pulse_auth_expired", {
+              detail: {
+                message:
+                  error.response?.data?.error ||
+                  "Your session has expired. Please sign in again.",
+              },
+            })
+          );
+        }
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
 // Centralized API endpoints
 export const api = {
   auth: {

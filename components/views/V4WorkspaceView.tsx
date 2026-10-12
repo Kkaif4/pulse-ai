@@ -40,7 +40,12 @@ export function V4WorkspaceView() {
       }
     } catch (err: any) {
       console.error("Failed to fetch V4 data:", err);
-      setError(err?.response?.data?.message || err.message || "Failed to load V4 data");
+      const isAuthError = err?.response?.status === 401 || err?.response?.status === 403;
+      setError(
+        isAuthError
+          ? "Session expired or unauthorized (403). Please sign in again."
+          : err?.response?.data?.message || err?.response?.data?.error || err.message || "Failed to load V4 data"
+      );
     } finally {
       setLoading(false);
       if (isManual) setRefreshing(false);
@@ -296,9 +301,29 @@ export function V4WorkspaceView() {
 
       {/* Error Banner */}
       {error && (
-        <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-xs text-red-300 flex items-center gap-2">
-          <AlertCircleIcon className="w-4 h-4 text-red-400 shrink-0" />
-          <span>{error}</span>
+        <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-xs text-red-300 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <AlertCircleIcon className="w-4 h-4 text-red-400 shrink-0" />
+            <span>{error}</span>
+          </div>
+          {(error.includes("expired") || error.includes("unauthorized") || error.includes("403")) && (
+            <button
+              onClick={() => {
+                if (typeof window !== "undefined") {
+                  localStorage.removeItem("pulse_token");
+                  localStorage.removeItem("pulse_username");
+                  window.dispatchEvent(
+                    new CustomEvent("pulse_auth_expired", {
+                      detail: { message: "Please log in again." },
+                    })
+                  );
+                }
+              }}
+              className="px-2.5 py-1 rounded bg-red-500/20 hover:bg-red-500/30 text-red-200 border border-red-500/30 font-medium transition cursor-pointer"
+            >
+              Log In Again
+            </button>
+          )}
         </div>
       )}
 

@@ -3,6 +3,20 @@
 import { useState, useEffect } from "react";
 import { api } from "../lib/api";
 
+function isTokenExpired(jwtToken: string): boolean {
+  try {
+    const parts = jwtToken.split(".");
+    if (parts.length !== 3) return true;
+    const payload = JSON.parse(atob(parts[1]));
+    if (payload.exp && payload.exp * 1000 < Date.now()) {
+      return true;
+    }
+    return false;
+  } catch {
+    return true;
+  }
+}
+
 export function useAuth() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [username, setUsername] = useState("");
@@ -16,10 +30,28 @@ export function useAuth() {
     const savedToken = localStorage.getItem("pulse_token");
     const savedUser = localStorage.getItem("pulse_username");
     if (savedToken && savedUser) {
-      setToken(savedToken);
-      setUsername(savedUser);
-      setIsAuthenticated(true);
+      if (isTokenExpired(savedToken)) {
+        localStorage.removeItem("pulse_token");
+        localStorage.removeItem("pulse_username");
+        setAuthError("Session expired. Please sign in again.");
+      } else {
+        setToken(savedToken);
+        setUsername(savedUser);
+        setIsAuthenticated(true);
+      }
     }
+  }, []);
+
+  useEffect(() => {
+    const onAuthExpired = (e: any) => {
+      setToken("");
+      setUsername("");
+      setIsAuthenticated(false);
+      setAuthError(e?.detail?.message || "Session expired or invalid. Please sign in again.");
+    };
+
+    window.addEventListener("pulse_auth_expired", onAuthExpired);
+    return () => window.removeEventListener("pulse_auth_expired", onAuthExpired);
   }, []);
 
   const handleAuth = async (e: React.FormEvent) => {
