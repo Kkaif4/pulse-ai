@@ -7,15 +7,24 @@ export const apiClient = axios.create({
   withCredentials: true, // Enables sending secure HttpOnly session cookies automatically
   headers: {
     "Content-Type": "application/json",
+    "Cache-Control": "no-cache, no-store, must-revalidate",
+    Pragma: "no-cache",
+    Expires: "0",
   },
+  // Accept 2xx status codes and 304 Not Modified without throwing AxiosError
+  validateStatus: (status) => (status >= 200 && status < 300) || status === 304,
 });
 
-// Automatically inject JWT token from localStorage into request headers as fallback
+// Automatically inject JWT token and enforce fresh data requests
 apiClient.interceptors.request.use(
   (config) => {
     const token = typeof window !== "undefined" ? localStorage.getItem("pulse_token") : null;
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
+    }
+    if (config.headers) {
+      config.headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
+      config.headers["Pragma"] = "no-cache";
     }
     return config;
   },
