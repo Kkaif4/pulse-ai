@@ -65,6 +65,35 @@ export interface LegacyTrade {
   summary: string;
 }
 
+export interface OrderBlockZone {
+  direction: "bullish" | "bearish";
+  top: number;
+  bottom: number;
+  formedAt: string;
+  touchCount: number;
+  status: "untested" | "mitigated";
+}
+
+export interface LiquiditySweep {
+  type: "high_sweep" | "low_sweep";
+  level: number;
+  sweptAt: string;
+  reversalConfirmed: boolean;
+}
+
+export interface V4Trade {
+  id: number | string;
+  timestamp: string;
+  spotPrice: number;
+  regime: string;
+  signal: string;
+  reason?: string;
+  stopLoss?: number | null;
+  takeProfit?: number | null;
+  activeOBs?: OrderBlockZone[] | null;
+  recentSweeps?: LiquiditySweep[] | null;
+}
+
 export interface MarketSessionStatus {
   isOpen: boolean;
   isCoolDown: boolean;

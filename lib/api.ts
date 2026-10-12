@@ -53,6 +53,10 @@ export const api = {
       const { data } = await apiClient.get("/trades/legacy", { params });
       return data;
     },
+    getV4All: async (params?: { since?: number | null; date?: string; limit?: number }) => {
+      const { data } = await apiClient.get("/trades/v4", { params });
+      return data;
+    },
     getCompareAll: async (params?: { date?: string; limit?: number }) => {
       const { data } = await apiClient.get("/trades/compare", { params });
       return data;
