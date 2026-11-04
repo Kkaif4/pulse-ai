@@ -66,19 +66,36 @@ export interface LegacyTrade {
 }
 
 export interface OrderBlockZone {
-  direction: "bullish" | "bearish";
-  top: number;
-  bottom: number;
-  formedAt: string;
-  touchCount: number;
-  status: "untested" | "mitigated";
+  id?: string;
+  direction: "bullish" | "bearish" | "BULLISH" | "BEARISH" | string;
+  top?: number;
+  bottom?: number;
+  upperBoundary?: number;
+  lowerBoundary?: number;
+  formedAt?: string;
+  detectionTime?: string;
+  confirmationTime?: string;
+  touchCount?: number;
+  status?: "untested" | "mitigated" | string;
+  isActive?: boolean;
 }
 
 export interface LiquiditySweep {
-  type: "high_sweep" | "low_sweep";
-  level: number;
-  sweptAt: string;
-  reversalConfirmed: boolean;
+  id?: string;
+  type?: "high_sweep" | "low_sweep" | string;
+  direction?: "BULLISH_SWEEP" | "BEARISH_SWEEP" | string;
+  level?: number;
+  sweptSwing?: {
+    type?: string;
+    price?: number;
+    timestamp?: string;
+  };
+  sweepHigh?: number;
+  sweepLow?: number;
+  sweepClose?: number;
+  sweptAt?: string;
+  sweepCandleTimestamp?: string;
+  reversalConfirmed?: boolean;
 }
 
 export interface V4Trade {

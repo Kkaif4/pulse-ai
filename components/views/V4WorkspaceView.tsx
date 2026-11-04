@@ -220,7 +220,7 @@ export function V4WorkspaceView() {
             <ActivityIcon className="w-3.5 h-3.5 text-zinc-500" />
           </div>
           <div className="text-xl font-bold text-white tracking-tight">
-            ₹{latestTrade ? Number(latestTrade.spotPrice).toFixed(2) : "--"}
+            ₹{latestTrade?.spotPrice != null ? Number(latestTrade.spotPrice).toFixed(2) : "--"}
           </div>
           <div className="text-[11px] text-zinc-500 mt-1 flex items-center gap-1">
             <ClockIcon className="w-3 h-3" />
@@ -278,7 +278,7 @@ export function V4WorkspaceView() {
             {activeOrderBlocks.length}
           </div>
           <div className="text-[11px] text-zinc-500 mt-1">
-            {activeOrderBlocks.filter((ob) => ob.status === "untested").length} untested zones
+            {activeOrderBlocks.filter((ob) => ob.status === "untested" || (ob.touchCount === 0)).length} untested zones
           </div>
         </div>
 
@@ -294,7 +294,7 @@ export function V4WorkspaceView() {
             {recentSweeps.length}
           </div>
           <div className="text-[11px] text-zinc-500 mt-1">
-            {recentSweeps.filter((s) => s.reversalConfirmed).length} confirmed reversals
+            {recentSweeps.filter((s) => s.reversalConfirmed || Boolean(s.direction)).length} confirmed reversals
           </div>
         </div>
       </div>
@@ -427,7 +427,7 @@ export function V4WorkspaceView() {
                           {formatIST(trade.timestamp)}
                         </td>
                         <td className="py-3 px-4 whitespace-nowrap font-mono text-white">
-                          ₹{Number(trade.spotPrice).toFixed(2)}
+                          ₹{trade.spotPrice != null ? Number(trade.spotPrice).toFixed(2) : "--"}
                         </td>
                         <td className="py-3 px-4 whitespace-nowrap">
                           <span
@@ -448,7 +448,7 @@ export function V4WorkspaceView() {
                           </span>
                         </td>
                         <td className="py-3 px-4 whitespace-nowrap text-[11px] font-mono">
-                          {trade.stopLoss && trade.takeProfit ? (
+                          {trade.stopLoss != null && trade.takeProfit != null ? (
                             <div className="flex flex-col text-[10px]">
                               <span className="text-rose-400">
                                 SL: ₹{Number(trade.stopLoss).toFixed(1)}
@@ -494,10 +494,23 @@ export function V4WorkspaceView() {
                 </div>
               ) : (
                 activeOrderBlocks.map((ob, idx) => {
-                  const isBullish = ob.direction === "bullish";
+                  const dir = (ob.direction || "").toLowerCase();
+                  const isBullish = dir.includes("bull");
+                  const top = ob.top ?? ob.upperBoundary;
+                  const bottom = ob.bottom ?? ob.lowerBoundary;
+                  const status =
+                    ob.status ??
+                    (ob.touchCount === 0
+                      ? "untested"
+                      : ob.isActive === false
+                      ? "mitigated"
+                      : "active");
+                  const formedTime =
+                    ob.formedAt || ob.detectionTime || ob.confirmationTime;
+
                   return (
                     <div
-                      key={idx}
+                      key={ob.id || idx}
                       className={`p-3 rounded-lg border text-xs transition ${
                         isBullish
                           ? "bg-emerald-950/20 border-emerald-500/30 text-emerald-200"
@@ -511,29 +524,29 @@ export function V4WorkspaceView() {
                           ) : (
                             <TrendingDownIcon className="w-3.5 h-3.5 text-rose-400" />
                           )}
-                          {ob.direction} OB
+                          {isBullish ? "BULLISH" : "BEARISH"} OB
                         </span>
                         <span
                           className={`px-1.5 py-0.5 rounded text-[10px] uppercase font-mono ${
-                            ob.status === "untested"
+                            status === "untested"
                               ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
                               : "bg-zinc-800 text-zinc-400"
                           }`}
                         >
-                          {ob.status}
+                          {status}
                         </span>
                       </div>
                       <div className="mt-2 flex items-center justify-between text-zinc-300 font-mono text-[11px]">
                         <span>
-                          Zone: ₹{ob.bottom.toFixed(1)} – ₹{ob.top.toFixed(1)}
+                          Zone: ₹{bottom != null ? Number(bottom).toFixed(1) : "--"} – ₹{top != null ? Number(top).toFixed(1) : "--"}
                         </span>
                         <span className="text-[10px] text-zinc-400">
-                          Touches: {ob.touchCount}
+                          Touches: {ob.touchCount ?? 0}
                         </span>
                       </div>
                       <div className="mt-1 text-[10px] text-zinc-400 flex items-center gap-1">
                         <ClockIcon className="w-3 h-3 text-zinc-500" />
-                        <span>Formed: {formatIST(ob.formedAt)}</span>
+                        <span>Formed: {formatIST(formedTime)}</span>
                       </div>
                     </div>
                   );
@@ -561,17 +574,33 @@ export function V4WorkspaceView() {
                 </div>
               ) : (
                 recentSweeps.map((sweep, idx) => {
-                  const isHighSweep = sweep.type === "high_sweep";
+                  const dir = (sweep.direction || "").toUpperCase();
+                  const isHighSweep =
+                    sweep.type === "high_sweep" ||
+                    dir.includes("BEAR") ||
+                    sweep.sweptSwing?.type === "HIGH";
+                  const level =
+                    sweep.level ??
+                    sweep.sweptSwing?.price ??
+                    sweep.sweepHigh ??
+                    sweep.sweepLow ??
+                    sweep.sweepClose;
+                  const sweptTime =
+                    sweep.sweptAt ||
+                    sweep.sweepCandleTimestamp ||
+                    sweep.sweptSwing?.timestamp;
+                  const isConfirmed = sweep.reversalConfirmed ?? true;
+
                   return (
                     <div
-                      key={idx}
+                      key={sweep.id || idx}
                       className="p-3 rounded-lg border border-purple-500/25 bg-purple-950/15 text-xs text-purple-200"
                     >
                       <div className="flex items-center justify-between font-semibold">
                         <span className="uppercase text-[11px] tracking-wide text-purple-300">
                           {isHighSweep ? "High Sweep" : "Low Sweep"}
                         </span>
-                        {sweep.reversalConfirmed ? (
+                        {isConfirmed ? (
                           <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
                             Reversal Confirmed
                           </span>
@@ -582,11 +611,11 @@ export function V4WorkspaceView() {
                         )}
                       </div>
                       <div className="mt-2 flex items-center justify-between text-zinc-300 font-mono text-[11px]">
-                        <span>Level: ₹{Number(sweep.level).toFixed(2)}</span>
+                        <span>Level: ₹{level != null ? Number(level).toFixed(2) : "--"}</span>
                       </div>
                       <div className="mt-1 text-[10px] text-zinc-400 flex items-center gap-1">
                         <ClockIcon className="w-3 h-3 text-zinc-500" />
-                        <span>Swept: {formatIST(sweep.sweptAt)}</span>
+                        <span>Swept: {formatIST(sweptTime)}</span>
                       </div>
                     </div>
                   );
